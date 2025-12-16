@@ -7,6 +7,7 @@ export const getUsers = async (req: Request, res: Response) => {
         // สำคัญ: ตรวจสอบชื่อ column ให้ตรงกับใน Database จริงของคุณนะครับ
         const users = await req.db('users')
             .select(
+                'id',
                 'username',
                 'name',
                 'lastname',
@@ -27,6 +28,8 @@ export const getUsers = async (req: Request, res: Response) => {
     }
 };
 
+
+
 export const registerUser = async (req: Request, res: Response) => {
     try {
         const { username, password, name, lastname, is_active, status } = req.body;
@@ -37,7 +40,7 @@ export const registerUser = async (req: Request, res: Response) => {
 
         const hashedPassword = crypto.createHash('md5').update(password).digest('hex');
 
-        await req.db('users').insert({
+        const [id] = await req.db('users').insert({
             username,
             password: hashedPassword,
             name,
@@ -47,7 +50,7 @@ export const registerUser = async (req: Request, res: Response) => {
             created_date: new Date()
         });
 
-        res.status(201).json({ username });
+        res.status(201).json({ "id": id, username });
 
     } catch (error: any) {
         if (error.code === 'ER_DUP_ENTRY') {
