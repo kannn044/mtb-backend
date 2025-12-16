@@ -1,7 +1,7 @@
 import * as jwt from 'jsonwebtoken';
 
 export class Jwt {
-  private secretKey = process.env.SECRET_KEY || 'your-secret-key';
+  private secretKey = process.env.JWT_SECRET || 'your-secret-key';
 
   sign(payload: any) {
     return jwt.sign(payload, this.secretKey);

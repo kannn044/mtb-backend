@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import crypto from 'crypto';
 
 export const getUsers = async (req: Request, res: Response) => {
     try {
@@ -6,13 +7,15 @@ export const getUsers = async (req: Request, res: Response) => {
         // สำคัญ: ตรวจสอบชื่อ column ให้ตรงกับใน Database จริงของคุณนะครับ
         const users = await req.db('users')
             .select(
-                'id',
                 'username',
-                'password',
+                'name',
+                'lastname',
                 'status',
                 'is_active',
-                'created_date'
+                'created_date',
+                'updated_date'
             )
+            .whereNot({ status: 'ADMIN' })
             .orderBy('created_date', 'desc'); // เรียงจากใหม่ไปเก่า
 
         // ส่งข้อมูลกลับไปเป็น JSON
@@ -20,6 +23,37 @@ export const getUsers = async (req: Request, res: Response) => {
 
     } catch (error) {
         console.error('Error fetching users:', error);
+        res.status(500).json({ message: 'Internal Server Error' });
+    }
+};
+
+export const registerUser = async (req: Request, res: Response) => {
+    try {
+        const { username, password, name, lastname, is_active, status } = req.body;
+
+        if (!username || !password) {
+            return res.status(400).json({ message: 'Username and password are required' });
+        }
+
+        const hashedPassword = crypto.createHash('md5').update(password).digest('hex');
+
+        await req.db('users').insert({
+            username,
+            password: hashedPassword,
+            name,
+            lastname: lastname,
+            is_active,
+            status,
+            created_date: new Date()
+        });
+
+        res.status(201).json({ username });
+
+    } catch (error: any) {
+        if (error.code === 'ER_DUP_ENTRY') {
+            return res.status(409).json({ message: 'Duplicate Username' });
+        }
+        console.error('Error registering user:', error);
         res.status(500).json({ message: 'Internal Server Error' });
     }
 };
