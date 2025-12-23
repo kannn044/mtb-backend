@@ -1,10 +1,9 @@
 import { Router } from 'express';
-import { uploadFile } from '../controllers/uploadController'
+import { uploadFile, uploadMiddleware } from '../controllers/uploadController'; // import มาจากไฟล์ข้างบน
 import { checkAuth } from '../middlewares/auth';
 
 const router = Router();
 
-// POST /api/upload
-router.post('/', checkAuth, uploadFile);
+router.post('/', checkAuth, uploadMiddleware.single('file'), uploadFile);
 
 export default router;
