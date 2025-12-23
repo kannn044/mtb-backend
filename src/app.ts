@@ -5,6 +5,7 @@ import { logger } from './middlewares/logger';
 import userRoute from './routes/userRoute';
 import loginRoute from './routes/loginRoute';
 import csvRoute from './routes/csvRoute';
+import uploadRoute from './routes/uploadRoute';
 
 const app = express();
 
@@ -18,5 +19,5 @@ app.use(dbMiddleware);
 app.use('/api/users', userRoute);
 app.use('/api/login', loginRoute);
 app.use('/api/csv', csvRoute);
-
+app.use('/api/upload', uploadRoute);
 export default app;
