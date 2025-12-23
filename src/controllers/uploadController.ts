@@ -21,44 +21,39 @@ import { knex } from 'knex';
 // const upload = multer({ storage: storage });
 
 export const uploadFile =  async (req: Request, res: Response) => {
+  try {
+    const { title, description } = req.body;
+    const file = req.file;
 
-  const { title, description } = req.body;
-  const file = req.file;
-  console.log('File:', file);
-  console.log('Title:', title);
-  console.log('Description:', description);
+    console.log('File:', file);
+    console.log('Title:', title);
+    console.log('Description:', description);
 
-  // try {
-  //   const { title, description } = req.body;
-  //   const file = req.file;
+    // if (!file) {
+    //   return res.status(400).json({ message: 'No file uploaded' });
+    // }
 
-  //   console.log('File:', file);
-  //   console.log('Title:', title);
-  //   console.log('Description:', description);
+    // บันทึกลง Database ด้วย Knex
+    // สมมติว่ามีตารางชื่อ files
+    /*
+    await db('files').insert({
+      title: title,
+      description: description,
+      file_path: file.path,
+      original_name: file.originalname,
+      created_at: new Date()
+    });
+    */
 
-  //   if (!file) {
-  //     return res.status(400).json({ message: 'No file uploaded' });
-  //   }
+    // console.log('Saved Metadata:', { title, description });
+    // console.log('Saved File:', file.path);
 
-  //   // บันทึกลง Database ด้วย Knex
-  //   // สมมติว่ามีตารางชื่อ files
-  //   /*
-  //   await db('files').insert({
-  //     title: title,
-  //     description: description,
-  //     file_path: file.path,
-  //     original_name: file.originalname,
-  //     created_at: new Date()
-  //   });
-  //   */
-
-  //   console.log('Saved Metadata:', { title, description });
-  //   console.log('Saved File:', file.path);
-
-  //   res.status(200).json({ message: 'Upload success' });
-  // } catch (error) {
-  //   const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-  //   res.status(500).json({ error: errorMessage });
-  // }
+    // res.status(200).json({ message: 'Upload success' });
+    return 'test';
+  } catch (error) {
+    // const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    // res.status(500).json({ error: errorMessage });
+    return error;
+  }
 };
   
