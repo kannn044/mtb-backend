@@ -2,58 +2,108 @@ import { Request, Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import fs from 'fs';
 import path from 'path';
-import csv from 'csv-parser';
-
 import multer from 'multer';
-import cors from 'cors';
 import { knex } from 'knex';
 
-// const storage = multer.diskStorage({
-//   destination: (req, file, cb) => {
-//     cb(null, 'uploads/'); // อย่าลืมสร้างโฟลเดอร์ uploads ในโปรเจกต์
-//   },
-//   filename: (req, file, cb) => {
-//     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-//     cb(null, uniqueSuffix + path.extname(file.originalname));
-//   }
-// });
+// ---------------------------------------------------------
+// 1. SETUP DATABASE (ถ้าคุณมีไฟล์ db config แยก ให้นำเข้าแทนส่วนนี้)
+// ---------------------------------------------------------
+const db = knex({
+  client: 'mysql2',
+  connection: {
+    host: process.env.DB_HOST || '127.0.0.1',
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || 'password',
+    database: process.env.DB_NAME || 'mtb_database',
+  },
+});
 
-// const upload = multer({ storage: storage });
+// ---------------------------------------------------------
+// 2. SETUP MULTER (จัดการการอัปโหลดไฟล์)
+// ---------------------------------------------------------
+const uploadDir = 'uploads/';
 
-export const uploadFile =  async (req: Request, res: Response) => {
+// ตรวจสอบว่ามีโฟลเดอร์ uploads ไหม ถ้าไม่มีให้สร้าง
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    // ตั้งชื่อไฟล์ใหม่: timestamp-random-ชื่อเดิม (เพื่อไม่ให้ชื่อซ้ำ)
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    // ป้องกันชื่อไฟล์ภาษาไทยเพี้ยน (อาจใช้แค่ uniqueSuffix + ext ก็ได้)
+    const ext = path.extname(file.originalname);
+    cb(null, `${uniqueSuffix}${ext}`);
+  }
+});
+
+// Export ตัว middleware นี้ไปใช้ที่ route (เช่น router.post('/upload', uploadMiddleware.single('file'), ...))
+export const uploadMiddleware = multer({ 
+    storage: storage,
+    limits: { fileSize: 10 * 1024 * 1024 } // จำกัดขนาด 10MB (ปรับได้)
+});
+
+// ---------------------------------------------------------
+// 3. CONTROLLER (Logic การทำงาน)
+// ---------------------------------------------------------
+export const uploadFile = async (req: Request, res: Response): Promise<void> => {
   try {
+    // ข้อมูล Meta Data จาก Body
     const { title, description } = req.body;
+    
+    // ข้อมูลไฟล์จาก Multer
     const file = req.file;
 
-    console.log('File:', file);
+    // Validation: ตรวจสอบว่ามีไฟล์หรือไม่
+    if (!file) {
+      res.status(StatusCodes.BAD_REQUEST).json({ message: 'No file uploaded' });
+      return;
+    }
+
+    // Validation: ตรวจสอบ Title
+    if (!title) {
+        // ถ้าไม่มี Title ให้ลบไฟล์ที่อัปโหลดเข้ามาทิ้งเพื่อไม่ให้รก Server
+        fs.unlinkSync(file.path);
+        res.status(StatusCodes.BAD_REQUEST).json({ message: 'Title is required' });
+        return;
+    }
+
+    console.log('--- Uploading ---');
     console.log('Title:', title);
-    console.log('Description:', description);
+    console.log('File:', file.filename);
 
-    // if (!file) {
-    //   return res.status(400).json({ message: 'No file uploaded' });
-    // }
+    // const insertData = {
+    //   title: title,
+    //   description: description || '',
+    //   original_name: file.originalname,
+    //   filename: file.filename,
+    //   file_path: file.path,
+    //   mime_type: file.mimetype,
+    //   size: file.size,
+    //   created_at: new Date()
+    // };
 
-    // บันทึกลง Database ด้วย Knex
-    // สมมติว่ามีตารางชื่อ files
-    /*
-    await db('files').insert({
-      title: title,
-      description: description,
-      file_path: file.path,
-      original_name: file.originalname,
-      created_at: new Date()
+    // await db('files').insert(insertData);
+
+    // ตอบกลับ Frontend
+    res.status(StatusCodes.CREATED).json({ 
+      message: 'Upload success',
+      // data: insertData
     });
-    */
 
-    // console.log('Saved Metadata:', { title, description });
-    // console.log('Saved File:', file.path);
-
-    // res.status(200).json({ message: 'Upload success' });
-    return 'test';
   } catch (error) {
-    // const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    // res.status(500).json({ error: errorMessage });
-    return error;
+    console.error('Upload Error:', error);
+
+    // ถ้า error และมีไฟล์ค้างอยู่ ให้ลบไฟล์ทิ้ง
+    if (req.file && req.file.path) {
+        try { fs.unlinkSync(req.file.path); } catch(e) {}
+    }
+
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ error: errorMessage });
   }
 };
-  
