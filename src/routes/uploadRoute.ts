@@ -1,11 +1,13 @@
-import { Router } from 'express';
-import { uploadFile, uploadMiddleware } from '../controllers/uploadController'; // import มาจากไฟล์ข้างบน
+import { Router, Request, Response, NextFunction } from 'express';
+import { uploadFile, getProvinces, getDistricts } from '../controllers/uploadController';
+import { uploadMiddleware } from '../middlewares/upload';
 import { checkAuth } from '../middlewares/auth';
 import multer from 'multer';
-import path from 'path';
 
 const router = Router();
 
-router.post('/', checkAuth, uploadMiddleware.single('file'), uploadFile);
+router.post('/', checkAuth, uploadMiddleware.array('files'), uploadFile);
+router.get('/provinces', checkAuth, getProvinces);
+router.get('/districts', checkAuth, getDistricts);
 
 export default router;
