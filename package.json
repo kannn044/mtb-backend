@@ -5,7 +5,10 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "prebuild": "ls -la",
     "build": "tsc",
+    "postbuild": "ls -la dist",
+    "prestart": "ls -la",
     "start": "node dist/server.js"
   },
   "keywords": [],
