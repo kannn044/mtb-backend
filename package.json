@@ -2,11 +2,14 @@
   "name": "mtb-backend",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "prebuild": "ls -la",
     "build": "tsc",
-    "start": "node dist/server.ts"
+    "postbuild": "ls -la dist",
+    "prestart": "ls -la",
+    "start": "node dist/server.js"
   },
   "keywords": [],
   "author": "",
