@@ -4,20 +4,20 @@ import fs from 'fs';
 import path from 'path';
 import * as xlsx from 'xlsx';
 import { Knex } from 'knex';
+import { ensureDirSync, getUploadBaseDir } from '../utils/uploadPaths';
 
 // =============================================================================
 // 1. CONFIGURATION & TYPES (การตั้งค่าและ Type)
 // =============================================================================
 
 // กำหนด Path ต่างๆ
-const UPLOAD_ROOT = 'uploads';
+const UPLOAD_ROOT = getUploadBaseDir();
 const SEQ_DATA_ROOT = path.join(UPLOAD_ROOT, 'seq_data');
 const TEXT_FILE_PATH = path.join(UPLOAD_ROOT, 'metadata_records.txt');
 
 // สร้างโฟลเดอร์ที่จำเป็นตอนเริ่มทำงานทันที (ถ้ายังไม่มี)
-[UPLOAD_ROOT, SEQ_DATA_ROOT].forEach(dir => {
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-});
+ensureDirSync(UPLOAD_ROOT);
+ensureDirSync(SEQ_DATA_ROOT);
 
 // Header ที่ต้องมีใน Metadata (และไฟล์ Text)
 const REQUIRED_HEADERS = [
