@@ -26,6 +26,7 @@ export const loginController = async (req: Request, res: Response, next: NextFun
 
     const jwt = new Jwt();
     const payload = {
+      id: user.id,
       name: user.name,
       lastname: user.lastname,
       username: user.username,

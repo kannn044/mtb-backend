@@ -6,7 +6,6 @@ import fs from 'fs';
 const uploadRoot = 'uploads';
 const tempDir = path.join(uploadRoot, 'temp');
 
-
 if (!fs.existsSync(tempDir)) {
   fs.mkdirSync(tempDir, { recursive: true });
 }

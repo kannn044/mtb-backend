@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { uploadFileSingle, uploadFileBatch, getProvinces, getDistricts } from '../controllers/uploadController';
+import { uploadFileSingle, uploadFileBatch, getProvinces, getDistricts, getRunPreview, executeRunProcess } from '../controllers/uploadController';
 import { uploadGzMiddleware, uploadBatchMiddleware } from '../middlewares/upload'; // Import ตัวใหม่มา
 import { checkAuth } from '../middlewares/auth';
 import multer from 'multer';
@@ -13,5 +13,7 @@ router.post('/batch', checkAuth,uploadBatchMiddleware.fields([
   ]), uploadFileBatch);
 router.get('/provinces', checkAuth, getProvinces);
 router.get('/districts', checkAuth, getDistricts);
+router.get('/run/preview', checkAuth, getRunPreview);
+router.post('/run/execute', checkAuth, executeRunProcess);
 
 export default router;
