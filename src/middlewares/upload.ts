@@ -1,18 +1,26 @@
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import { ensureDirSync, getUploadBaseDir } from '../utils/uploadPaths';
 
 // --- 1. SETUP STORAGE (ใช้ร่วมกัน) ---
-const uploadRoot = 'uploads';
+const uploadRoot = getUploadBaseDir();
 const tempDir = path.join(uploadRoot, 'temp');
 
 if (!fs.existsSync(tempDir)) {
   fs.mkdirSync(tempDir, { recursive: true });
 }
+ensureDirSync(tempDir);
 
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
+    // Ensure the directory exists for cold starts / serverless runtimes.
+    try {
+      ensureDirSync(tempDir);
+    } catch (e) {
+      return cb(e as Error, tempDir);
+    }
     cb(null, tempDir);
   },
   filename: (req, file, cb) => {

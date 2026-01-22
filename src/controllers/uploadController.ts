@@ -7,6 +7,7 @@ import { Knex } from 'knex';
 import jwt from 'jsonwebtoken';
 import dotenv from "dotenv";
 dotenv.config();
+import { ensureDirSync, getUploadBaseDir } from '../utils/uploadPaths';
 
 // =============================================================================
 // 1. CONFIGURATION & TYPES
