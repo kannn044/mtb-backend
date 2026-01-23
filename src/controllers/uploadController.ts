@@ -358,7 +358,7 @@ export const executeRunProcess = async (req: Request, res: Response): Promise<vo
         const timestamp = getTimestamp();
         
         const engineRoot = path.resolve('..', engineName); 
-        const destUserDir = path.join(engineRoot, `user_${userId}`);
+        const destUserDir = path.join(engineRoot, 'user_spaces', `user_${userId}`);
         const destRunDir = path.join(destUserDir, `run_process_${timestamp}`);
         const destInputsDir = path.join(destRunDir, 'inputs');
 
@@ -379,7 +379,7 @@ export const executeRunProcess = async (req: Request, res: Response): Promise<vo
         ensureUserDirs(userId);
 
         const scriptPath = path.join(engineRoot, 'run_pipeline.sh'); 
-        const command = `sh ${scriptPath}`; 
+        const command = `sh ${scriptPath}`;
 
         console.log(`[Run] Triggering script at: ${engineRoot}`);
         
