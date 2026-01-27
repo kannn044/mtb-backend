@@ -83,6 +83,12 @@ export const downloadRunZip = async (req: Request, res: Response, next: NextFunc
       return res.status(404).json({ message: 'Run folder not found' });
     }
 
+    const outputDir = path.join(runDir, 'output');
+    const outputStat = await fs.promises.stat(outputDir).catch(() => null);
+    if (!outputStat || !outputStat.isDirectory()) {
+      return res.status(404).json({ message: 'Output folder not found' });
+    }
+
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${runId}.zip"`);
 
@@ -93,8 +99,8 @@ export const downloadRunZip = async (req: Request, res: Response, next: NextFunc
     });
 
     archive.pipe(res);
-    // Keep folder structure inside the zip
-    archive.directory(runDir, runId);
+    // Zip everything *inside* output/ at the zip root
+    archive.directory(outputDir, false);
 
     await archive.finalize();
   } catch (err) {

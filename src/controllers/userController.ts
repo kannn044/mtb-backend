@@ -9,6 +9,7 @@ export const getUsers = async (req: Request, res: Response) => {
             .select(
                 'id',
                 'username',
+                'email',
                 'name',
                 'lastname',
                 'status',
@@ -32,16 +33,25 @@ export const getUsers = async (req: Request, res: Response) => {
 
 export const createUser = async (req: Request, res: Response) => {
     try {
-        const { username, password, name, lastname, is_active, status } = req.body;
+        const { username, password, email, name, lastname, is_active, status } = req.body;
 
         if (!username || !password) {
             return res.status(400).json({ message: 'Username and password are required' });
+        }
+
+        if (email && typeof email === 'string') {
+            const trimmed = email.trim();
+            // minimal email format check (avoid blocking uncommon but valid emails)
+            if (trimmed.length > 254 || !/^\S+@\S+\.\S+$/.test(trimmed)) {
+                return res.status(400).json({ message: 'Invalid email' });
+            }
         }
 
         const hashedPassword = crypto.createHash('md5').update(password).digest('hex');
 
         const [id] = await req.db('users').insert({
             username,
+            email,
             password: hashedPassword,
             name,
             lastname: lastname,
@@ -64,7 +74,7 @@ export const createUser = async (req: Request, res: Response) => {
 export const updateUser = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const { name, lastname, is_active, status } = req.body;
+        const { email, name, lastname, is_active, status } = req.body;
 
         const [user] = await req.db('users').where('id', id).select('id');
 
@@ -72,12 +82,31 @@ export const updateUser = async (req: Request, res: Response) => {
             return res.status(404).json({ message: 'User not found' });
         }
 
+        if (email !== undefined) {
+            if (email === null) {
+                // allow clearing email
+            } else if (typeof email !== 'string') {
+                return res.status(400).json({ message: 'Invalid email' });
+            } else {
+                const trimmed = email.trim();
+                if (trimmed.length > 254 || !/^\S+@\S+\.\S+$/.test(trimmed)) {
+                    return res.status(400).json({ message: 'Invalid email' });
+                }
+            }
+        }
+
+        const updateData: Record<string, any> = {
+            updated_date: new Date(),
+        };
+
+        if (email !== undefined) updateData.email = email;
+        if (name !== undefined) updateData.name = name;
+        if (lastname !== undefined) updateData.lastname = lastname;
+        if (is_active !== undefined) updateData.is_active = is_active;
+        if (status !== undefined) updateData.status = status;
+
         await req.db('users').where('id', id).update({
-            name,
-            lastname,
-            is_active,
-            status,
-            updated_date: new Date()
+            ...updateData
         });
 
         res.status(200).json({ message: 'User updated successfully' });
