@@ -354,10 +354,15 @@ export const executeRunProcess = async (req: Request, res: Response): Promise<vo
         const { exec } = require('child_process');
         const sourceInputsDir = path.resolve(UPLOAD_ROOT, 'user_spaces', `user_${userId}`, 'inputs');
 
-        const engineName = process.env.ENGINE_NAME || 'mtb-engine';
+        const dirPath = process.env.DIR_PATH;
         const timestamp = getTimestamp();
-        
-        const engineRoot = path.resolve('..', engineName); 
+
+        if (!dirPath) {
+            res.status(StatusCodes.BAD_REQUEST).json({ message: 'Missing DIR_PATH' });
+            return;
+        }
+
+        const engineRoot = path.resolve(dirPath);
         const destUserDir = path.join(engineRoot, 'user_spaces', `user_${userId}`);
         const destRunDir = path.join(destUserDir, `run_process_${timestamp}`);
         const destInputsDir = path.join(destRunDir, 'inputs');

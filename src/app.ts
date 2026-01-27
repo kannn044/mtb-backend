@@ -4,8 +4,11 @@ import { dbMiddleware } from './middlewares/dbMiddleware'; // import มา
 import { logger } from './middlewares/logger';
 import userRoute from './routes/userRoute';
 import loginRoute from './routes/loginRoute';
-import csvRoute from './routes/csvRoute';
+import txtRoute from './routes/txtRoute';
 import uploadRoute from './routes/uploadRoute';
+import emailRoute from './routes/emailRoute';
+import dashboardRoute from './routes/dashboardRoute';
+import downloadRoute from './routes/downloadRoute';
 
 const app = express();
 
@@ -18,7 +21,10 @@ app.use(dbMiddleware);
 
 app.use('/api/users', userRoute);
 app.use('/api/login', loginRoute);
-app.use('/api/csv', csvRoute);
+app.use('/api/txt', txtRoute);
 app.use('/api/upload', uploadRoute);
+app.use('/api/email', emailRoute);
+app.use('/api/dashboard', dashboardRoute);
+app.use('/api/download', downloadRoute);
 
 export default app;

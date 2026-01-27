@@ -1,9 +1,8 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import csvRouter from './csvRoute';
+import txtRouter from './txtRoute';
 
 const router: Router = Router();
-
-router.use('/csv', csvRouter);
+router.use('/txt', txtRouter);
 
 router.get('/', (req: Request, res: Response, next: NextFunction) => {
   res.status(200).send('Hello, world!');
