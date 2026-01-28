@@ -5,12 +5,13 @@ export type PreexistingDbVersion = {
   dirName: string; // e.g. v20260115.02
   date: string; // YYYYMMDD
   revision: number; // xx
-  baseDir: string; // <DIR_PATH>/preexisting_db
+  baseDir: string; // <DIR_PATH>/preexisting_db(s)
   versionDir: string; // full path
   metadataPath: string; // full path to metadata.txt
 };
 
-const VERSION_RE = /^v(\d{8})\.(\d{2})$/;
+// Supports vYYYYMMDD.xx and vYYYYMMDD.x (e.g. v20260124.1)
+const VERSION_RE = /^v(\d{8})\.(\d{1,2})$/;
 
 const parseVersionDir = (dirName: string): { date: string; revision: number } | null => {
   const m = VERSION_RE.exec(dirName);
@@ -26,15 +27,15 @@ const compareVersions = (a: { date: string; revision: number }, b: { date: strin
 /**
  * Resolve the latest `preexisting_db/vYYYYMMDD.xx` folder and its `metadata.txt`.
  *
- * Uses `<DIR_PATH>/preexisting_db` as base.
+ * Uses `<DIR_PATH>/preexisting_db(s)` as base.
  */
 export const resolveLatestPreexistingMetadata = (dirPath: string): PreexistingDbVersion => {
   const trimmed = dirPath?.trim();
   if (!trimmed) throw new Error('Missing DIR_PATH');
 
-  const baseDir = path.resolve(trimmed, 'preexisting_db');
+  const baseDir = path.resolve(trimmed, 'preexisting_dbs');
   if (!fs.existsSync(baseDir) || !fs.statSync(baseDir).isDirectory()) {
-    throw new Error(`preexisting_db not found at ${baseDir}`);
+    throw new Error(`preexisting_dbs not found at ${baseDir}`);
   }
 
   const entries = fs.readdirSync(baseDir, { withFileTypes: true });
@@ -44,7 +45,7 @@ export const resolveLatestPreexistingMetadata = (dirPath: string): PreexistingDb
     .filter((v): v is { dirName: string; parsed: { date: string; revision: number } } => Boolean(v.parsed));
 
   if (versions.length === 0) {
-    throw new Error(`No version folders found in ${baseDir} (expected vYYYYMMDD.xx)`);
+    throw new Error(`No version folders found in ${baseDir} (expected vYYYYMMDD.xx or vYYYYMMDD.x)`);
   }
 
   versions.sort((a, b) => compareVersions(a.parsed, b.parsed));
