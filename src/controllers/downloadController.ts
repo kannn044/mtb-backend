@@ -83,7 +83,7 @@ export const downloadRunZip = async (req: Request, res: Response, next: NextFunc
       return res.status(404).json({ message: 'Run folder not found' });
     }
 
-    const outputDir = path.join(runDir, 'output');
+    const outputDir = path.join(runDir, 'outputs');
     const outputStat = await fs.promises.stat(outputDir).catch(() => null);
     if (!outputStat || !outputStat.isDirectory()) {
       return res.status(404).json({ message: 'Output folder not found' });
