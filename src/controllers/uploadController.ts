@@ -524,6 +524,13 @@ export const executeRunProcess = async (req: Request, res: Response): Promise<vo
         delete (childEnv as any).JAVA_CMD;
         delete (childEnv as any).NXF_JAVA_HOME;
 
+        // If mamba/conda is installed under a different user (not on system PATH),
+        // allow injecting its bin dir into PATH for this child process.
+        const pipelineCondaBinDir = (process.env.PIPELINE_CONDA_BIN_DIR || '').trim();
+        if (pipelineCondaBinDir) {
+            childEnv.PATH = `${pipelineCondaBinDir}:${childEnv.PATH || ''}`;
+        }
+
         const pipelineJavaHome = (process.env.PIPELINE_JAVA_HOME || '').trim();
         if (pipelineJavaHome) {
             childEnv.JAVA_HOME = pipelineJavaHome;
