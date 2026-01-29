@@ -26,6 +26,10 @@ app.use(express.json());
 // ✅ เรียกใช้ตรงนี้! ทุก Route ที่อยู่ข้างล่างจะรู้จัก req.db ทั้งหมด
 app.use(dbMiddleware);
 
+app.get('/', (req, res) => {
+  res.send('MTB Backend is running.');
+});
+
 app.use('/api/users', userRoute);
 app.use('/api/login', loginRoute);
 app.use('/api/txt', txtRoute);
