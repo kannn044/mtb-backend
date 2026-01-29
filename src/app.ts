@@ -13,7 +13,12 @@ import downloadRoute from './routes/downloadRoute';
 const app = express();
 
 app.use(logger);
-app.use(cors());
+const corsOptions = {
+  origin: 'http://203.157.84.69:3000',
+  optionsSuccessStatus: 200, // some legacy browsers (IE11, various SmartTVs) choke on 204
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // ✅ เรียกใช้ตรงนี้! ทุก Route ที่อยู่ข้างล่างจะรู้จัก req.db ทั้งหมด
