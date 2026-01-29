@@ -9,6 +9,8 @@ import uploadRoute from './routes/uploadRoute';
 import emailRoute from './routes/emailRoute';
 import dashboardRoute from './routes/dashboardRoute';
 import downloadRoute from './routes/downloadRoute';
+import registerRoute from './routes/registerRoute';
+import passwordRoute from './routes/passwordRoute';
 
 const app = express();
 
@@ -31,5 +33,7 @@ app.use('/api/upload', uploadRoute);
 app.use('/api/email', emailRoute);
 app.use('/api/dashboard', dashboardRoute);
 app.use('/api/download', downloadRoute);
+app.use('/api/register', registerRoute);
+app.use('/api/password', passwordRoute);
 
 export default app;
