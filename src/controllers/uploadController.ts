@@ -7,6 +7,7 @@ import { Knex } from 'knex';
 import jwt from 'jsonwebtoken';
 import dotenv from "dotenv";
 dotenv.config();
+import nodemailer from 'nodemailer';
 import { ensureDirSync, getUploadBaseDir } from '../utils/uploadPaths';
 
 // =============================================================================
@@ -23,6 +24,68 @@ const REQUIRED_HEADERS = [
 interface CustomRequest extends Request {
     db: Knex;
 }
+
+const parseBoolean = (val: string | undefined): boolean | undefined => {
+    if (val === undefined) return undefined;
+    const normalized = val.trim().toLowerCase();
+    if (['1', 'true', 'yes', 'y', 'on'].includes(normalized)) return true;
+    if (['0', 'false', 'no', 'n', 'off'].includes(normalized)) return false;
+    return undefined;
+};
+
+const createTransporter = () => {
+    const host = process.env.SMTP_HOST;
+    const user = process.env.SMTP_USER;
+    const pass = process.env.SMTP_PASS;
+    const port = Number(process.env.SMTP_PORT) || 587;
+
+    if (!host) throw new Error('Missing SMTP_HOST');
+
+    const secure = parseBoolean(process.env.SMTP_SECURE) ?? port === 465;
+    const rejectUnauthorized = parseBoolean(process.env.SMTP_REJECT_UNAUTHORIZED) ?? true;
+
+    return nodemailer.createTransport({
+        host,
+        port,
+        secure,
+        auth: user && pass ? { user, pass } : undefined,
+        tls: {
+            minVersion: 'TLSv1.2',
+            rejectUnauthorized,
+        },
+    });
+};
+
+const sendPipelineFinishedEmail = async (opts: {
+    to: string;
+    userLabel: string;
+    runId: string;
+    success: boolean;
+}): Promise<void> => {
+    const from = (process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
+    if (!from) throw new Error('Missing SMTP_FROM or SMTP_USER');
+
+    const subject = opts.success
+        ? `[MTB] Pipeline finished: ${opts.runId}`
+        : `[MTB] Pipeline failed: ${opts.runId}`;
+
+    const previewPath = `/api/download/runs/${opts.runId}/report/overall/overall_wgs_cluster_summary_report.html`;
+    const text =
+        `Hello ${opts.userLabel},\n\n` +
+        `Your pipeline run has finished.\n` +
+        `Run ID: ${opts.runId}\n` +
+        `Result: ${opts.success ? 'SUCCESS' : 'FAILED'}\n\n` +
+        `If successful, you can preview the report at:\n` +
+        `${previewPath}\n`;
+
+    const transporter = createTransporter();
+    await transporter.sendMail({
+        from,
+        to: opts.to,
+        subject,
+        text,
+    });
+};
 
 // =============================================================================
 // 2. HELPER FUNCTIONS
@@ -369,6 +432,27 @@ export const executeRunProcess = async (req: Request, res: Response): Promise<vo
         // [UPDATE] ใช้ getUserIdFromRequest แทน
         const userId = getUserIdFromRequest(req);
 
+        // Pre-fetch user's email so we can notify on completion.
+        const db = (req as any).db as Knex | undefined;
+        let userEmail: string | null = null;
+        let userLabel: string = `user_${userId}`;
+        if (db) {
+            const userRow = await db('users')
+                .where({ id: userId })
+                .first('email', 'username', 'name', 'lastname')
+                .catch(() => null);
+
+            if (userRow) {
+                const email = (userRow as any).email;
+                if (typeof email === 'string' && email.trim()) userEmail = email.trim();
+
+                const name = typeof (userRow as any).name === 'string' ? (userRow as any).name.trim() : '';
+                const lastname = typeof (userRow as any).lastname === 'string' ? (userRow as any).lastname.trim() : '';
+                const username = typeof (userRow as any).username === 'string' ? (userRow as any).username.trim() : '';
+                userLabel = [name, lastname].filter(Boolean).join(' ') || username || userLabel;
+            }
+        }
+
         const { seqDataDir, metadataDir } = ensureUserDirs(userId);
 
         const hasMetadata = fs.existsSync(path.join(metadataDir, 'metadata.txt'));
@@ -469,6 +553,22 @@ export const executeRunProcess = async (req: Request, res: Response): Promise<vo
 
         child.on('close', (code: number | null, signal: string | null) => {
             console.log(`[Pipeline:${runProcessId}] exited`, { code, signal });
+
+            const success = code === 0;
+            if (!userEmail) {
+                console.log(`[Pipeline:${runProcessId}] no user email; skip notify`, { userId });
+                return;
+            }
+
+            void sendPipelineFinishedEmail({
+                to: userEmail,
+                userLabel,
+                runId: runProcessId,
+                success,
+            }).then(
+                () => console.log(`[Pipeline:${runProcessId}] notification email sent`, { to: userEmail }),
+                (e) => console.error(`[Pipeline:${runProcessId}] notification email failed`, e)
+            );
         });
 
         res.status(StatusCodes.OK).json({

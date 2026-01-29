@@ -17,7 +17,7 @@ const app = express();
 
 app.use(logger);
 const corsOptions = {
-  origin: 'http://203.157.84.69:3000',
+  origin: 'http://10.1.1.171:3000',
   optionsSuccessStatus: 200, // some legacy browsers (IE11, various SmartTVs) choke on 204
 };
 
