@@ -147,8 +147,17 @@ export const uploadFileSingle = async (req: Request, res: Response): Promise<voi
     const movedFilePaths: string[] = [];
 
     try {
+        console.log('[UploadSingle] incoming', {
+            url: req.originalUrl,
+            ip: req.ip,
+            contentType: req.headers['content-type'],
+            bodyKeys: Object.keys((req as any).body || {}),
+            filesCount: Array.isArray((req as any).files) ? (req as any).files.length : 0,
+        });
+
         // [UPDATE] เรียกใช้ Helper
         const userId = getUserIdFromRequest(req); 
+        console.log('[UploadSingle] user', { userId });
         const { seqDataDir, metadataDir } = ensureUserDirs(userId);
         const metadataFilePath = path.join(metadataDir, 'metadata.txt');
 
@@ -200,7 +209,11 @@ export const uploadFileSingle = async (req: Request, res: Response): Promise<voi
         res.status(StatusCodes.CREATED).json({ message: 'Upload success', path: `user_${userId}` });
 
     } catch (error) {
-        console.error('Single Upload Error:', error);
+        console.error('Single Upload Error:', {
+            message: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
+            url: req.originalUrl,
+        });
         cleanupTempFiles(uploadedFiles);
         rollbackDestinationFiles(movedFilePaths);
         const msg = error instanceof Error ? error.message : 'Unknown error';
@@ -213,7 +226,18 @@ export const uploadFileBatch = async (req: Request, res: Response): Promise<void
     const movedFilePaths: string[] = [];
 
     try {
+        const filesMapPreview = (req as any).files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+        console.log('[UploadBatch] incoming', {
+            url: req.originalUrl,
+            ip: req.ip,
+            contentType: req.headers['content-type'],
+            bodyKeys: Object.keys((req as any).body || {}),
+            excelCount: filesMapPreview?.excel?.length ?? 0,
+            gzCount: filesMapPreview?.files?.length ?? 0,
+        });
+
         const userId = getUserIdFromRequest(req);
+        console.log('[UploadBatch] user', { userId });
         const { seqDataDir, metadataDir } = ensureUserDirs(userId);
         const metadataFilePath = path.join(metadataDir, 'metadata.txt');
 
@@ -282,7 +306,11 @@ export const uploadFileBatch = async (req: Request, res: Response): Promise<void
         res.status(StatusCodes.OK).json({ message: 'Batch upload success', records: excelData.length });
 
     } catch (error) {
-        console.error('Batch Upload Error:', error);
+        console.error('Batch Upload Error:', {
+            message: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
+            url: req.originalUrl,
+        });
         cleanupTempFiles(allUploadedFiles);
         rollbackDestinationFiles(movedFilePaths);
         const msg = error instanceof Error ? error.message : 'Unknown error';
