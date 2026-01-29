@@ -13,15 +13,15 @@ import { ensureDirSync, getUploadBaseDir } from '../utils/uploadPaths';
 // 1. CONFIGURATION & TYPES
 // =============================================================================
 
-const UPLOAD_ROOT = `uploads`; 
+const UPLOAD_ROOT = `uploads`;
 const REQUIRED_HEADERS = [
-  'patient_id', 'sample_id', 'fastq_1', 'fastq_2', 'collection_date', 'district', 
-  'province', 'sex', 'age', 'ethnic_group', 'education', 
-  'occupation', 'chest_x_ray', 'treatment_outcome'
+    'patient_id', 'sample_id', 'fastq_1', 'fastq_2', 'collection_date', 'district',
+    'province', 'sex', 'age', 'ethnic_group', 'education',
+    'occupation', 'chest_x_ray', 'treatment_outcome'
 ];
 
 interface CustomRequest extends Request {
-  db: Knex;
+    db: Knex;
 }
 
 // =============================================================================
@@ -39,7 +39,7 @@ const getUserIdFromRequest = (req: Request): string => {
     try {
         const secret = process.env.JWT_SECRET || 'your_secret_key';
         const decoded = jwt.verify(token, secret) as any;
-        
+
         // ตรวจสอบว่ามี id หรือไม่
         if (!decoded || !decoded.id) {
             throw new Error('Token payload missing "id" field');
@@ -66,22 +66,22 @@ const safeMove = (src: string, dest: string) => {
 };
 
 const sanitizeFileName = (originalName: string): string => {
-  const utf8Name = Buffer.from(originalName, 'latin1').toString('utf8');
-  return path.basename(utf8Name);
+    const utf8Name = Buffer.from(originalName, 'latin1').toString('utf8');
+    return path.basename(utf8Name);
 };
 
 const cleanupTempFiles = (files: Express.Multer.File[]) => {
-  files.forEach(file => {
-      if (fs.existsSync(file.path)) {
-          try { fs.unlinkSync(file.path); } catch (e) { console.warn('Temp cleanup warning:', e); }
-      }
-  });
+    files.forEach(file => {
+        if (fs.existsSync(file.path)) {
+            try { fs.unlinkSync(file.path); } catch (e) { console.warn('Temp cleanup warning:', e); }
+        }
+    });
 };
 
 const rollbackDestinationFiles = (filePaths: string[]) => {
     filePaths.forEach(filePath => {
         if (fs.existsSync(filePath)) {
-            try { fs.unlinkSync(filePath); console.log(`Rolled back: ${filePath}`); } 
+            try { fs.unlinkSync(filePath); console.log(`Rolled back: ${filePath}`); }
             catch (e) { console.error(`Failed to rollback: ${filePath}`, e); }
         }
     });
@@ -156,7 +156,7 @@ export const uploadFileSingle = async (req: Request, res: Response): Promise<voi
         });
 
         // [UPDATE] เรียกใช้ Helper
-        const userId = getUserIdFromRequest(req); 
+        const userId = getUserIdFromRequest(req);
         console.log('[UploadSingle] user', { userId });
         const { seqDataDir, metadataDir } = ensureUserDirs(userId);
         const metadataFilePath = path.join(metadataDir, 'metadata.txt');
@@ -165,12 +165,12 @@ export const uploadFileSingle = async (req: Request, res: Response): Promise<voi
         uploadedFiles.forEach(f => f.originalname = sanitizeFileName(f.originalname));
 
         let metadataObj: any;
-        try { metadataObj = JSON.parse(req.body.metadata); } 
+        try { metadataObj = JSON.parse(req.body.metadata); }
         catch (e) { throw new Error('Invalid metadata JSON format'); }
 
         // Validation
         if (!metadataObj.sample_id || uploadedFiles.length !== 2) {
-             throw new Error('Missing sample_id or must upload exactly 2 files for Single mode.');
+            throw new Error('Missing sample_id or must upload exactly 2 files for Single mode.');
         }
 
         const f1Name = metadataObj.fastq_1;
@@ -181,7 +181,7 @@ export const uploadFileSingle = async (req: Request, res: Response): Promise<voi
         if (!file1 || !file2) throw new Error(`Uploaded files do not match metadata filenames`);
 
         const { sampleIds } = getExistingRecords(metadataFilePath);
-        
+
         if (sampleIds.has(String(metadataObj.sample_id))) throw new Error(`Duplicate sample_id detected`);
         if (fs.existsSync(path.join(seqDataDir, f1Name))) throw new Error(`File exists: ${f1Name}`);
         if (fs.existsSync(path.join(seqDataDir, f2Name))) throw new Error(`File exists: ${f2Name}`);
@@ -266,24 +266,24 @@ export const uploadFileBatch = async (req: Request, res: Response): Promise<void
             const f1Name = String(row.fastq_1 || '').trim();
             const f2Name = String(row.fastq_2 || '').trim();
 
-            if (!sId || !f1Name || !f2Name) throw new Error(`Row ${i+1}: Missing info`);
-            
+            if (!sId || !f1Name || !f2Name) throw new Error(`Row ${i + 1}: Missing info`);
+
             const file1 = gzFiles.find(f => f.originalname === f1Name);
             const file2 = gzFiles.find(f => f.originalname === f2Name);
-            if (!file1 || !file2) throw new Error(`Row ${i+1}: Files not uploaded.`);
+            if (!file1 || !file2) throw new Error(`Row ${i + 1}: Files not uploaded.`);
 
-            if (sampleIds.has(sId)) throw new Error(`Row ${i+1}: Duplicate sample_id '${sId}' exists.`);
+            if (sampleIds.has(sId)) throw new Error(`Row ${i + 1}: Duplicate sample_id '${sId}' exists.`);
             if (fs.existsSync(path.join(seqDataDir, f1Name))) throw new Error(`File ${f1Name} exists.`);
             if (fs.existsSync(path.join(seqDataDir, f2Name))) throw new Error(`File ${f2Name} exists.`);
-            if (batchSampleIds.has(sId)) throw new Error(`Row ${i+1}: Duplicate in batch.`);
-            
+            if (batchSampleIds.has(sId)) throw new Error(`Row ${i + 1}: Duplicate in batch.`);
+
             batchSampleIds.add(sId);
             filesToMove.push({ file: file1, dest: path.join(seqDataDir, f1Name) });
             filesToMove.push({ file: file2, dest: path.join(seqDataDir, f2Name) });
         }
 
         try {
-            const uniqueMoves = new Map<string, {file: Express.Multer.File, dest: string}>();
+            const uniqueMoves = new Map<string, { file: Express.Multer.File, dest: string }>();
             filesToMove.forEach(item => uniqueMoves.set(item.file.originalname, item));
             for (const item of uniqueMoves.values()) {
                 safeMove(item.file.path, item.dest);
@@ -325,7 +325,7 @@ export const getRunPreview = async (req: Request, res: Response): Promise<void> 
     try {
         // [UPDATE] ใช้ getUserIdFromRequest แทน
         const userId = getUserIdFromRequest(req);
-        
+
         const { metadataDir } = ensureUserDirs(userId);
         const metadataFilePath = path.join(metadataDir, 'metadata.txt');
 
@@ -370,7 +370,7 @@ export const executeRunProcess = async (req: Request, res: Response): Promise<vo
         const userId = getUserIdFromRequest(req);
 
         const { seqDataDir, metadataDir } = ensureUserDirs(userId);
-        
+
         const hasMetadata = fs.existsSync(path.join(metadataDir, 'metadata.txt'));
         const hasSeqFiles = fs.readdirSync(seqDataDir).length > 0;
 
@@ -379,7 +379,7 @@ export const executeRunProcess = async (req: Request, res: Response): Promise<vo
             return;
         }
 
-        const { exec } = require('child_process');
+        const { spawn } = require('child_process');
         const sourceInputsDir = path.resolve(UPLOAD_ROOT, 'user_spaces', `user_${userId}`, 'inputs');
 
         const dirPath = process.env.DIR_PATH;
@@ -395,10 +395,13 @@ export const executeRunProcess = async (req: Request, res: Response): Promise<vo
         const destRunDir = path.join(destUserDir, `run_process_${timestamp}`);
         const destInputsDir = path.join(destRunDir, 'inputs');
 
+        const userIdRun = `user_${userId}`;
+        const runProcessId = `run_process_${timestamp}`;
+
         if (!fs.existsSync(destInputsDir)) {
             fs.mkdirSync(destInputsDir, { recursive: true });
         }
-        
+
         const srcSeq = path.join(sourceInputsDir, 'seq_data');
         const srcMeta = path.join(sourceInputsDir, 'metadata');
         const destSeq = path.join(destInputsDir, 'seq_data');
@@ -411,18 +414,64 @@ export const executeRunProcess = async (req: Request, res: Response): Promise<vo
 
         ensureUserDirs(userId);
 
-        const scriptPath = path.join(engineRoot, 'run_pipeline.sh'); 
-        const command = `sh ${scriptPath}`;
+            const pipelineCmd =
+                `unset JAVA_HOME JAVA_CMD NXF_JAVA_HOME; ` +
+                `ENV_NAME=MTB_WGS_cluster_analysis; ` +
+                `NF_CMD="unset JAVA_HOME JAVA_CMD NXF_JAVA_HOME; nextflow run src_user_data_analysis/main.nf --user_acc \\"${userIdRun}\\" --run_id \\"${runProcessId}\\" -resume"; ` +
+                `if command -v mamba >/dev/null 2>&1; then ` +
+                `  mamba run -n "$ENV_NAME" bash -c "$NF_CMD"; ` +
+                `elif command -v conda >/dev/null 2>&1; then ` +
+                `  conda run -n "$ENV_NAME" bash -c "$NF_CMD"; ` +
+                `else ` +
+                `  echo "Neither mamba nor conda found in PATH" 1>&2; exit 127; ` +
+                `fi`;
 
-        console.log(`[Run] Triggering script at: ${engineRoot}`);
-        
-        exec(command, { cwd: engineRoot }, (error: any, stdout: any, stderr: any) => {
-            if (error) { console.error(`[Script Error]: ${error.message}`); return; }
-            if (stderr) console.error(`[Script Stderr]: ${stderr}`);
-            console.log(`[Script Stdout]: ${stdout}`);
+        console.log('[Run] Triggering pipeline', {
+            cwd: engineRoot,
+            user: userIdRun,
+            run: runProcessId,
+            cmd: pipelineCmd,
         });
 
-        res.status(StatusCodes.OK).json({ 
+        // Run with a controlled Java environment (Nextflow requires Java 17+).
+        // Avoid inheriting system-wide JAVA_HOME/JAVA_CMD that may point to Java 8.
+        const childEnv: Record<string, string> = { ...process.env } as any;
+        delete (childEnv as any).JAVA_HOME;
+        delete (childEnv as any).JAVA_CMD;
+        delete (childEnv as any).NXF_JAVA_HOME;
+
+        const pipelineJavaHome = (process.env.PIPELINE_JAVA_HOME || '').trim();
+        if (pipelineJavaHome) {
+            childEnv.JAVA_HOME = pipelineJavaHome;
+            childEnv.NXF_JAVA_HOME = pipelineJavaHome;
+            childEnv.PATH = `${path.join(pipelineJavaHome, 'bin')}:${childEnv.PATH || ''}`;
+        }
+
+        // Avoid login shells here; they can re-export JAVA_HOME/JAVA_CMD from shell profiles.
+        const child = spawn('bash', ['-c', pipelineCmd], {
+            cwd: engineRoot,
+            env: childEnv,
+        });
+
+        child.stdout?.on('data', (d: Buffer) => {
+            const s = d.toString('utf8');
+            if (s.trim()) console.log(`[Pipeline:${runProcessId}:stdout] ${s}`);
+        });
+
+        child.stderr?.on('data', (d: Buffer) => {
+            const s = d.toString('utf8');
+            if (s.trim()) console.error(`[Pipeline:${runProcessId}:stderr] ${s}`);
+        });
+
+        child.on('error', (e: Error) => {
+            console.error(`[Pipeline:${runProcessId}] spawn error`, e);
+        });
+
+        child.on('close', (code: number | null, signal: string | null) => {
+            console.log(`[Pipeline:${runProcessId}] exited`, { code, signal });
+        });
+
+        res.status(StatusCodes.OK).json({
             message: 'Process started successfully',
             run_id: `run_process_${timestamp}`,
             destination: destRunDir
@@ -443,7 +492,7 @@ export const getProvinces = async (req: Request, res: Response): Promise<void> =
     const customReq = req as CustomRequest;
     try {
         if (!customReq.db) throw new Error("Database connection missing");
-        
+
         const provinces = await customReq.db('province').select('adm1_name', 'adm1_pcode');
         res.status(StatusCodes.OK).json(provinces);
     } catch (error) {
@@ -452,7 +501,7 @@ export const getProvinces = async (req: Request, res: Response): Promise<void> =
     }
 };
 
-export const getDistricts = async (req: Request, res: Response): Promise<void> => {    
+export const getDistricts = async (req: Request, res: Response): Promise<void> => {
     const customReq = req as CustomRequest;
     try {
         if (!customReq.db) throw new Error("Database connection missing");
@@ -460,7 +509,7 @@ export const getDistricts = async (req: Request, res: Response): Promise<void> =
         const districts = await customReq.db('district')
             .select('adm2_name', 'adm2_pcode')
             .where('adm1_pcode', req.query.pcode as string);
-        
+
         res.status(StatusCodes.OK).json(districts);
     } catch (error) {
         console.error('Error fetching districts:', error);
