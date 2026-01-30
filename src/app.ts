@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser'; // 🔥 1. Import เข้ามา
 import { dbMiddleware } from './middlewares/dbMiddleware'; // import มา
 import { logger } from './middlewares/logger';
 import userRoute from './routes/userRoute';
@@ -18,11 +19,13 @@ const app = express();
 app.use(logger);
 const corsOptions = {
   origin: 'http://10.1.1.171:3000',
+  credentials: true,
   optionsSuccessStatus: 200, // some legacy browsers (IE11, various SmartTVs) choke on 204
 };
 
 app.use(cors(corsOptions));
 app.use(express.json());
+app.use(cookieParser());
 
 // ✅ เรียกใช้ตรงนี้! ทุก Route ที่อยู่ข้างล่างจะรู้จัก req.db ทั้งหมด
 app.use(dbMiddleware);
