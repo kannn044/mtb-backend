@@ -196,9 +196,41 @@ const formatRowToTsv = (row: any): string => {
     }).join('\t');
 };
 
+const formatRowToTsvExcel = (row: any): string => {
+    return REQUIRED_HEADERS.map(header => {
+        const val = row[header];
+
+        // ตรวจสอบว่ามีค่า และเป็นคอลัมน์ collection_date หรือไม่
+        if (val !== undefined && val !== null) {
+            
+            // กรณีเป็น collection_date ให้แปลง format
+            if (header === 'collection_date') {
+                return formatExcelDate(val); 
+            }
+            // กรณีอื่นๆ ให้ trim ตามปกติ
+            return String(val).trim();
+        }
+
+        return 'NA';
+    }).join('\t');
+};
+
 const getTimestamp = () => {
     const now = new Date();
     return now.toISOString().replace(/[-T:]/g, '').split('.')[0];
+};
+
+const formatExcelDate = (serial: number | string): string => {
+    const serialNum = Number(serial);
+    if (isNaN(serialNum)) return String(serial); // ถ้าไม่ใช่ตัวเลข ให้คืนค่าเดิมกลับไป
+
+    const date = new Date((serialNum - 25569) * 86400 * 1000);
+
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = date.toLocaleString('en-US', { month: 'short' });
+    const year = date.getFullYear();
+
+    return `${day}/${month}/${year}`;
 };
 
 // =============================================================================
@@ -355,7 +387,7 @@ export const uploadFileBatch = async (req: Request, res: Response): Promise<void
         } catch (ioError) { throw new Error('Failed to move batch files.'); }
 
         try {
-            const linesToWrite = excelData.map(row => formatRowToTsv(row)).join('\n');
+            const linesToWrite = excelData.map(row => formatRowToTsvExcel(row)).join('\n');
             if (!fs.existsSync(metadataFilePath)) {
                 fs.writeFileSync(metadataFilePath, REQUIRED_HEADERS.join('\t') + '\n' + linesToWrite + '\n', 'utf8');
             } else {
