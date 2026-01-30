@@ -501,7 +501,7 @@ export const executeRunProcess = async (req: Request, res: Response): Promise<vo
             const pipelineCmd =
                 `unset JAVA_HOME JAVA_CMD NXF_JAVA_HOME; ` +
                 `ENV_NAME=MTB_WGS_cluster_analysis; ` +
-                `NF_CMD="unset JAVA_HOME JAVA_CMD NXF_JAVA_HOME; nextflow run src_user_data_analysis/main.nf --user_acc \\"${userIdRun}\\" --run_id \\"${runProcessId}\\" -resume"; ` +
+                `NF_CMD="unset JAVA_HOME JAVA_CMD NXF_JAVA_HOME; nextflow run src_user_data_analysis/main.nf --user_acc \\"${userIdRun}\\" --run_id \\"${runProcessId}\\""; ` +
                 `if command -v mamba >/dev/null 2>&1; then ` +
                 `  mamba run -n "$ENV_NAME" bash -c "$NF_CMD"; ` +
                 `elif command -v conda >/dev/null 2>&1; then ` +
