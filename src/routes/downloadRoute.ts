@@ -6,7 +6,6 @@ const router = Router();
 
 router.get('/runs', checkAuth, listRuns);
 router.get('/runs/:runId/zip', checkAuth, downloadRunZip);
-// Serves HTML report and its assets under overall_report/
-router.get('/runs/:runId/report/overall/*filePath', checkAuth, previewOverallReportFile);
+router.use('/runs/:runId/report/cluster-view', checkAuth, previewOverallReportFile);
 
 export default router;

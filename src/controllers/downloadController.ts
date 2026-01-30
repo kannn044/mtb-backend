@@ -3,13 +3,13 @@ import fs from 'fs';
 import path from 'path';
 import archiver from 'archiver';
 
+// --- Helper Functions ---
+
 const getUserIdFromRequest = (req: Request): string => {
   const decoded = (req as any).decoded;
   if (!decoded || decoded.id == null) {
     throw new Error('Missing decoded token payload');
   }
-  console.log(decoded.id);
-  
   return String(decoded.id);
 };
 
@@ -22,12 +22,12 @@ const getUserRootDir = (userId: string): string => {
 };
 
 const isSafeRunId = (runId: string): boolean => {
-  // Expect run_process_{uuid} (uuid often includes hyphens)
   return /^run_process_[A-Za-z0-9_-]+$/.test(runId);
 };
 
-const getOverallReportDir = (runDir: string): string => {
-  return path.join(runDir, 'outputs', 'user_reports', '7_WGS_cluster_reports', 'overall_report');
+// ใช้ Root นี้เป็นหลัก เพื่อให้รองรับทั้ง overall_report และ sub-folders
+const getClusterReportRootDir = (runDir: string): string => {
+  return path.join(runDir, 'outputs', 'user_reports', '7_WGS_cluster_reports');
 };
 
 const isPathInside = (childPath: string, parentPath: string): boolean => {
@@ -36,21 +36,21 @@ const isPathInside = (childPath: string, parentPath: string): boolean => {
   return childResolved.startsWith(parentResolved);
 };
 
-const parsePipelineExecutionLog = (content: string): { status?: string; endTimeRaw?: string } => {
+const parsePipelineExecutionLog = (content: string) => {
   const statusMatch = content.match(/^\s*Status\s*:\s*(.+?)\s*$/mi);
   const endTimeMatch = content.match(/^\s*End Time\s*:\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s*$/mi);
-
-  const status = statusMatch?.[1]?.trim();
-
-  const endTimeRaw = endTimeMatch?.[1]?.trim();
-  return { status, endTimeRaw };
+  return { 
+    status: statusMatch?.[1]?.trim(), 
+    endTimeRaw: endTimeMatch?.[1]?.trim() 
+  };
 };
 
 const pad2 = (n: number): string => String(n).padStart(2, '0');
-
 const formatLocalYmdHms = (d: Date): string => {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
 };
+
+// --- Controllers ---
 
 export const listRuns = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -69,15 +69,19 @@ export const listRuns = async (req: Request, res: Response, next: NextFunction) 
         .map(async (entry) => {
           const name = entry.name;
           if (!isSafeRunId(name)) return null;
+
           const fullPath = path.join(userRootDir, name);
           const stat = await fs.promises.stat(fullPath);
+          
+          // URL นี้หน้าบ้านจะเอาไปใช้เปิด
+          const reportBaseUrl = `/api/download/runs/${name}/report/cluster-view/overall_report/overall_wgs_cluster_summary_report.html`;
 
           const logPath = path.join(fullPath, 'outputs', 'user_reports', 'pipeline_execution.log');
           const logStat = await fs.promises.stat(logPath).catch(() => null);
+
           if (logStat?.isFile()) {
             const content = await fs.promises.readFile(logPath, 'utf8').catch(() => '');
             const parsed = parsePipelineExecutionLog(content);
-
             const endTimeDate = parsed.endTimeRaw ? new Date(parsed.endTimeRaw.replace(' ', 'T')) : null;
             const endTimeMs = endTimeDate && !Number.isNaN(endTimeDate.getTime()) ? endTimeDate.getTime() : logStat.mtime.getTime();
 
@@ -85,7 +89,7 @@ export const listRuns = async (req: Request, res: Response, next: NextFunction) 
               id: name,
               status: parsed.status || 'PROCESSING',
               updatedAt: parsed.endTimeRaw || formatLocalYmdHms(logStat.mtime),
-              overallReportUrl: `/api/download/runs/${name}/report/overall/overall_wgs_cluster_summary_report.html`,
+              overallReportUrl: reportBaseUrl,
               updatedAtMs: endTimeMs,
             };
           }
@@ -94,16 +98,14 @@ export const listRuns = async (req: Request, res: Response, next: NextFunction) 
             id: name,
             status: 'PROCESSING',
             updatedAt: formatLocalYmdHms(stat.mtime),
-            overallReportUrl: `/api/download/runs/${name}/report/overall/overall_wgs_cluster_summary_report.html`,
+            overallReportUrl: reportBaseUrl,
             updatedAtMs: stat.mtime.getTime(),
           };
         })
     );
 
     const filtered = runs
-      .filter(
-        (r): r is { id: string; status: string; updatedAt: string; overallReportUrl: string; updatedAtMs: number } => r !== null
-      )
+      .filter((r): r is NonNullable<typeof r> => r !== null)
       .sort((a, b) => b.updatedAtMs - a.updatedAtMs)
       .map(({ updatedAtMs, ...rest }) => rest);
 
@@ -125,19 +127,13 @@ export const downloadRunZip = async (req: Request, res: Response, next: NextFunc
     const userRootDir = getUserRootDir(userId);
     const runDir = path.resolve(userRootDir, runId);
 
-    // Path traversal protection
-    const userRootResolved = path.resolve(userRootDir) + path.sep;
-    if (!(runDir + path.sep).startsWith(userRootResolved)) {
+    if (!isPathInside(runDir, userRootDir)) {
       return res.status(400).json({ message: 'Invalid path' });
-    }
-
-    const stat = await fs.promises.stat(runDir).catch(() => null);
-    if (!stat || !stat.isDirectory()) {
-      return res.status(404).json({ message: 'Run folder not found' });
     }
 
     const outputDir = path.join(runDir, 'outputs');
     const outputStat = await fs.promises.stat(outputDir).catch(() => null);
+
     if (!outputStat || !outputStat.isDirectory()) {
       return res.status(404).json({ message: 'Output folder not found' });
     }
@@ -146,15 +142,9 @@ export const downloadRunZip = async (req: Request, res: Response, next: NextFunc
     res.setHeader('Content-Disposition', `attachment; filename="${runId}.zip"`);
 
     const archive = archiver('zip', { zlib: { level: 9 } });
-
-    archive.on('error', (archiveErr) => {
-      next(archiveErr);
-    });
-
+    archive.on('error', (err) => next(err));
     archive.pipe(res);
-    // Zip everything *inside* output/ at the zip root
     archive.directory(outputDir, false);
-
     await archive.finalize();
   } catch (err) {
     return next(err);
@@ -162,32 +152,44 @@ export const downloadRunZip = async (req: Request, res: Response, next: NextFunc
 };
 
 export const previewOverallReportFile = async (req: Request, res: Response, next: NextFunction) => {
+  // 1. Router.use รับทุก Method จึงต้องกรองให้เหลือแค่ GET
+  if (req.method !== 'GET') {
+    return next();
+  }
+
   try {
     const userId = getUserIdFromRequest(req);
-    const runId = String(req.params.runId || '');
-    const filePathParam = String((req.params as any).filePath || '');
+    const runId = req.params.runId;
+    
+    // 2. ดึง Path ส่วนหางจาก req.path (ที่ router.use ตัดมาให้)
+    const rawPath = req.path; 
+
+    if (!rawPath || rawPath === '/') {
+       return res.status(400).json({ message: 'Missing file path' });
+    }
 
     if (!isSafeRunId(runId)) {
       return res.status(400).json({ message: 'Invalid runId' });
     }
 
+    // 3. เตรียม Path
     const userRootDir = getUserRootDir(userId);
     const runDir = path.resolve(userRootDir, runId);
-    if (!isPathInside(runDir, userRootDir)) {
-      return res.status(400).json({ message: 'Invalid path' });
+    
+    if (!isPathInside(runDir, userRootDir)) { 
+        return res.status(400).json({ message: 'Invalid run path' }); 
     }
 
-    const reportDir = getOverallReportDir(runDir);
-    const reportDirStat = await fs.promises.stat(reportDir).catch(() => null);
-    if (!reportDirStat || !reportDirStat.isDirectory()) {
-      return res.status(404).json({ message: 'Report folder not found' });
-    }
+    // Root หลัก: 7_WGS_cluster_reports (เพื่อให้ลิงก์หากันได้)
+    const reportRootDir = getClusterReportRootDir(runDir);
 
-    // Prevent path traversal and always resolve inside overall_report/
-    const requestedFile = filePathParam.replace(/^\/+/, '');
-    const filePath = path.resolve(reportDir, requestedFile);
-    if (!isPathInside(filePath, reportDir)) {
-      return res.status(400).json({ message: 'Invalid path' });
+    // 4. Clean Path (ลบ Query String และ Slash นำหน้า)
+    const cleanPath = decodeURIComponent(rawPath.split('?')[0]).replace(/^\/+/, '');
+    const filePath = path.resolve(reportRootDir, cleanPath);
+
+    // 5. Security Check (สำคัญที่สุด: ห้ามหลุดจาก Folder แม่)
+    if (!isPathInside(filePath, reportRootDir)) {
+      return res.status(400).json({ message: 'Access denied: File outside report scope' });
     }
 
     const stat = await fs.promises.stat(filePath).catch(() => null);
@@ -195,9 +197,11 @@ export const previewOverallReportFile = async (req: Request, res: Response, next
       return res.status(404).json({ message: 'File not found' });
     }
 
+    // 6. ส่งไฟล์
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Cache-Control', 'no-store');
     return res.sendFile(filePath);
+
   } catch (err) {
     return next(err);
   }
