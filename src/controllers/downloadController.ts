@@ -159,9 +159,11 @@ export const previewOverallReportFile = async (req: Request, res: Response, next
 
   try {
     const userId = getUserIdFromRequest(req);
-    const runId = req.params.runId;
     
-    // 2. ดึง Path ส่วนหางจาก req.path (ที่ router.use ตัดมาให้)
+    // ✅ แก้ไขตรงนี้: แปลงให้เป็น string เสมอ เพื่อแก้ TypeScript Error
+    const runId = String(req.params.runId || '');
+    
+    // 2. ดึง Path ส่วนหางจาก req.path
     const rawPath = req.path; 
 
     if (!rawPath || rawPath === '/') {
@@ -180,14 +182,14 @@ export const previewOverallReportFile = async (req: Request, res: Response, next
         return res.status(400).json({ message: 'Invalid run path' }); 
     }
 
-    // Root หลัก: 7_WGS_cluster_reports (เพื่อให้ลิงก์หากันได้)
+    // Root หลัก: 7_WGS_cluster_reports
     const reportRootDir = getClusterReportRootDir(runDir);
 
-    // 4. Clean Path (ลบ Query String และ Slash นำหน้า)
+    // 4. Clean Path
     const cleanPath = decodeURIComponent(rawPath.split('?')[0]).replace(/^\/+/, '');
     const filePath = path.resolve(reportRootDir, cleanPath);
 
-    // 5. Security Check (สำคัญที่สุด: ห้ามหลุดจาก Folder แม่)
+    // 5. Security Check
     if (!isPathInside(filePath, reportRootDir)) {
       return res.status(400).json({ message: 'Access denied: File outside report scope' });
     }
