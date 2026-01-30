@@ -8,6 +8,8 @@ const getUserIdFromRequest = (req: Request): string => {
   if (!decoded || decoded.id == null) {
     throw new Error('Missing decoded token payload');
   }
+  console.log(decoded.id);
+  
   return String(decoded.id);
 };
 
