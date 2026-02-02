@@ -28,6 +28,7 @@ export const loginController = async (req: Request, res: Response, next: NextFun
     const payload = {
       id: user.id,
       name: user.name,
+      email: user.email,
       lastname: user.lastname,
       username: user.username,
       status: user.status,
