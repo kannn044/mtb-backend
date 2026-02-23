@@ -7,8 +7,8 @@ import { Knex } from 'knex';
 import jwt from 'jsonwebtoken';
 import dotenv from "dotenv";
 dotenv.config();
-import nodemailer from 'nodemailer';
 import { ensureDirSync, getUploadBaseDir } from '../utils/uploadPaths';
+import { enqueuePipelineRun, kickPipelineQueue } from '../utils/pipelineQueue';
 
 // =============================================================================
 // 1. CONFIGURATION & TYPES
@@ -25,67 +25,6 @@ interface CustomRequest extends Request {
     db: Knex;
 }
 
-const parseBoolean = (val: string | undefined): boolean | undefined => {
-    if (val === undefined) return undefined;
-    const normalized = val.trim().toLowerCase();
-    if (['1', 'true', 'yes', 'y', 'on'].includes(normalized)) return true;
-    if (['0', 'false', 'no', 'n', 'off'].includes(normalized)) return false;
-    return undefined;
-};
-
-const createTransporter = () => {
-    const host = process.env.SMTP_HOST;
-    const user = process.env.SMTP_USER;
-    const pass = process.env.SMTP_PASS;
-    const port = Number(process.env.SMTP_PORT) || 587;
-
-    if (!host) throw new Error('Missing SMTP_HOST');
-
-    const secure = parseBoolean(process.env.SMTP_SECURE) ?? port === 465;
-    const rejectUnauthorized = parseBoolean(process.env.SMTP_REJECT_UNAUTHORIZED) ?? true;
-
-    return nodemailer.createTransport({
-        host,
-        port,
-        secure,
-        auth: user && pass ? { user, pass } : undefined,
-        tls: {
-            minVersion: 'TLSv1.2',
-            rejectUnauthorized,
-        },
-    });
-};
-
-const sendPipelineFinishedEmail = async (opts: {
-    to: string;
-    userLabel: string;
-    runId: string;
-    success: boolean;
-}): Promise<void> => {
-    const from = (process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
-    if (!from) throw new Error('Missing SMTP_FROM or SMTP_USER');
-
-    const subject = opts.success
-        ? `[MTB] Pipeline finished: ${opts.runId}`
-        : `[MTB] Pipeline failed: ${opts.runId}`;
-
-    const previewPath = `/api/download/runs/${opts.runId}/report/overall/overall_wgs_cluster_summary_report.html`;
-    const text =
-        `Hello ${opts.userLabel},\n\n` +
-        `Your pipeline run has finished.\n` +
-        `Run ID: ${opts.runId}\n` +
-        `Result: ${opts.success ? 'SUCCESS' : 'FAILED'}\n\n` +
-        `If successful, you can preview the report at:\n` +
-        `${previewPath}\n`;
-
-    const transporter = createTransporter();
-    await transporter.sendMail({
-        from,
-        to: opts.to,
-        subject,
-        text,
-    });
-};
 
 // =============================================================================
 // 2. HELPER FUNCTIONS
@@ -463,7 +402,6 @@ export const executeRunProcess = async (req: Request, res: Response): Promise<vo
     try {
         // [UPDATE] ใช้ getUserIdFromRequest แทน
         const userId = getUserIdFromRequest(req);
-
         // Pre-fetch user's email so we can notify on completion.
         const db = (req as any).db as Knex | undefined;
         let userEmail: string | null = null;
@@ -484,7 +422,6 @@ export const executeRunProcess = async (req: Request, res: Response): Promise<vo
                 userLabel = [name, lastname].filter(Boolean).join(' ') || username || userLabel;
             }
         }
-
         const { seqDataDir, metadataDir } = ensureUserDirs(userId);
 
         const hasMetadata = fs.existsSync(path.join(metadataDir, 'metadata.txt'));
@@ -495,7 +432,6 @@ export const executeRunProcess = async (req: Request, res: Response): Promise<vo
             return;
         }
 
-        const { spawn } = require('child_process');
         const sourceInputsDir = path.resolve(UPLOAD_ROOT, 'user_spaces', `user_${userId}`, 'inputs');
 
         const dirPath = process.env.DIR_PATH;
@@ -508,11 +444,9 @@ export const executeRunProcess = async (req: Request, res: Response): Promise<vo
 
         const engineRoot = path.resolve(dirPath);
         const destUserDir = path.join(engineRoot, 'user_spaces', `user_${userId}`);
-        const destRunDir = path.join(destUserDir, `run_process_${timestamp}`);
-        const destInputsDir = path.join(destRunDir, 'inputs');
-
-        const userIdRun = `user_${userId}`;
         const runProcessId = `run_process_${timestamp}`;
+        const destRunDir = path.join(destUserDir, runProcessId);
+        const destInputsDir = path.join(destRunDir, 'inputs');
 
         if (!fs.existsSync(destInputsDir)) {
             fs.mkdirSync(destInputsDir, { recursive: true });
@@ -530,90 +464,25 @@ export const executeRunProcess = async (req: Request, res: Response): Promise<vo
 
         ensureUserDirs(userId);
 
-            const pipelineCmd =
-                `unset JAVA_HOME JAVA_CMD NXF_JAVA_HOME; ` +
-                `ENV_NAME=MTB_WGS_cluster_analysis; ` +
-                `NF_CMD="unset JAVA_HOME JAVA_CMD NXF_JAVA_HOME; nextflow run src_user_data_analysis/main.nf --user_acc \\"${userIdRun}\\" --run_id \\"${runProcessId}\\""; ` +
-                `if command -v mamba >/dev/null 2>&1; then ` +
-                `  mamba run -n "$ENV_NAME" bash -c "$NF_CMD"; ` +
-                `elif command -v conda >/dev/null 2>&1; then ` +
-                `  conda run -n "$ENV_NAME" bash -c "$NF_CMD"; ` +
-                `else ` +
-                `  echo "Neither mamba nor conda found in PATH" 1>&2; exit 127; ` +
-                `fi`;
-
-        console.log('[Run] Triggering pipeline', {
-            cwd: engineRoot,
-            user: userIdRun,
-            run: runProcessId,
-            cmd: pipelineCmd,
+        const { queuePosition } = await enqueuePipelineRun({
+            db: (req as any).db as Knex | undefined,
+            userId,
+            runId: runProcessId,
+            engineRoot,
+            destRunDir,
+            userEmail,
+            userLabel,
+            requestedIp: req.ip,
         });
 
-        // Run with a controlled Java environment (Nextflow requires Java 17+).
-        // Avoid inheriting system-wide JAVA_HOME/JAVA_CMD that may point to Java 8.
-        const childEnv: Record<string, string> = { ...process.env } as any;
-        delete (childEnv as any).JAVA_HOME;
-        delete (childEnv as any).JAVA_CMD;
-        delete (childEnv as any).NXF_JAVA_HOME;
+        kickPipelineQueue();
 
-        // If mamba/conda is installed under a different user (not on system PATH),
-        // allow injecting its bin dir into PATH for this child process.
-        const pipelineCondaBinDir = (process.env.PIPELINE_CONDA_BIN_DIR || '').trim();
-        if (pipelineCondaBinDir) {
-            childEnv.PATH = `${pipelineCondaBinDir}:${childEnv.PATH || ''}`;
-        }
-
-        const pipelineJavaHome = (process.env.PIPELINE_JAVA_HOME || '').trim();
-        if (pipelineJavaHome) {
-            childEnv.JAVA_HOME = pipelineJavaHome;
-            childEnv.NXF_JAVA_HOME = pipelineJavaHome;
-            childEnv.PATH = `${path.join(pipelineJavaHome, 'bin')}:${childEnv.PATH || ''}`;
-        }
-
-        // Avoid login shells here; they can re-export JAVA_HOME/JAVA_CMD from shell profiles.
-        const child = spawn('bash', ['-c', pipelineCmd], {
-            cwd: engineRoot,
-            env: childEnv,
-        });
-
-        child.stdout?.on('data', (d: Buffer) => {
-            const s = d.toString('utf8');
-            if (s.trim()) console.log(`[Pipeline:${runProcessId}:stdout] ${s}`);
-        });
-
-        child.stderr?.on('data', (d: Buffer) => {
-            const s = d.toString('utf8');
-            if (s.trim()) console.error(`[Pipeline:${runProcessId}:stderr] ${s}`);
-        });
-
-        child.on('error', (e: Error) => {
-            console.error(`[Pipeline:${runProcessId}] spawn error`, e);
-        });
-
-        child.on('close', (code: number | null, signal: string | null) => {
-            console.log(`[Pipeline:${runProcessId}] exited`, { code, signal });
-
-            const success = code === 0;
-            if (!userEmail) {
-                console.log(`[Pipeline:${runProcessId}] no user email; skip notify`, { userId });
-                return;
-            }
-
-            void sendPipelineFinishedEmail({
-                to: userEmail,
-                userLabel,
-                runId: runProcessId,
-                success,
-            }).then(
-                () => console.log(`[Pipeline:${runProcessId}] notification email sent`, { to: userEmail }),
-                (e) => console.error(`[Pipeline:${runProcessId}] notification email failed`, e)
-            );
-        });
-
-        res.status(StatusCodes.OK).json({
-            message: 'Process started successfully',
-            run_id: `run_process_${timestamp}`,
-            destination: destRunDir
+        res.status(StatusCodes.ACCEPTED).json({
+            message: 'Process queued',
+            run_id: runProcessId,
+            status: 'QUEUED',
+            queue_position: queuePosition,
+            destination: destRunDir,
         });
 
     } catch (error) {
