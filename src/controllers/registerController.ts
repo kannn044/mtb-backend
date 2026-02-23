@@ -1,8 +1,9 @@
 import { Request, Response } from 'express';
 import crypto from 'crypto';
 import nodemailer from 'nodemailer';
+import { logAudit } from '../utils/auditLogger'; // NEW IMPORT
 
-// Helper function to generate a random password
+// Helper function to generate a random password (No longer used as password comes from frontend, but kept if needed elsewhere)
 const generatePassword = (length = 12) => {
     return crypto.randomBytes(Math.ceil(length / 2))
         .toString('hex')
@@ -45,10 +46,10 @@ const createTransporter = () => {
 
 export const registerUser = async (req: Request, res: Response) => {
     try {
-        const { username, email, name, lastname } = req.body;
+        const { username, email, name, lastname, organization, password } = req.body;
 
-        if (!username || !email || !name || !lastname) {
-            return res.status(400).json({ message: 'Username, email, name, and lastname are required' });
+        if (!username || !email || !name || !lastname || !password) {
+            return res.status(400).json({ message: 'Username, email, name, lastname, and password are required' });
         }
 
         // Add email validation
@@ -62,22 +63,32 @@ export const registerUser = async (req: Request, res: Response) => {
             return res.status(400).json({ message: 'Invalid email' });
         }
 
-        const password = generatePassword();
+        // Add password complexity validation
+        const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+        if (!passwordRegex.test(password)) {
+            return res.status(400).json({ message: 'Password must be at least 8 characters long, contain an uppercase letter, a lowercase letter, a number, and a special character.' });
+        }
+
         const hashedPassword = crypto.createHash('md5').update(password).digest('hex');
 
         // Insert user into database
-        await req.db('users').insert({
+        const [userId] = await req.db('users').insert({
             username,
             email,
             password: hashedPassword,
             name,
             lastname,
+            organization: organization || null,
             is_active: 'Y',
-            status: 'USER',
+            status: 'VIEWER', // Default role VIEWER
             created_date: new Date()
         });
 
-        // Send password to user's email
+        // Audit Logging
+        const ipAddress = req.ip || req.socket.remoteAddress || 'Unknown';
+        await logAudit(req.db, userId, 'REGISTER_SUCCESS', `User ${username} registered successfully`, ipAddress);
+
+        // Send registration confirmation email (No longer sending the raw generated password)
         const transporter = createTransporter();
         const from = process.env.SMTP_FROM || process.env.SMTP_USER;
         
@@ -91,11 +102,11 @@ export const registerUser = async (req: Request, res: Response) => {
             from,
             to: email,
             subject: 'Your account has been created',
-            text: `Hello ${name}, your password is: ${password}`,
-            html: `<p>Hello ${name},</p><p>Your password is: <b>${password}</b></p>`
+            text: `Hello ${name}, your account has been successfully created. You can now login with your credentials.`,
+            html: `<p>Hello ${name},</p><p>Your account has been successfully created. You can now login with your credentials.</p>`
         });
 
-        res.status(201).json({ message: 'User registered successfully. Please check your email for the password.' });
+        res.status(201).json({ message: 'User registered successfully. Please check your email for confirmation.' });
 
     } catch (error: any) {
         if (error.code === 'ER_DUP_ENTRY') {
