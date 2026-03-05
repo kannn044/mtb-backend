@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import crypto from 'crypto';
 import nodemailer from 'nodemailer';
+import { logAudit } from '../utils/auditLogger'; // NEW IMPORT
 
 // Helper function to generate a random password
 const generatePassword = (length = 12) => {
@@ -45,7 +46,7 @@ const createTransporter = () => {
 
 export const registerUser = async (req: Request, res: Response) => {
     try {
-        const { username, email, name, lastname } = req.body;
+        const { username, email, name, lastname, organization } = req.body;
 
         if (!username || !email || !name || !lastname) {
             return res.status(400).json({ message: 'Username, email, name, and lastname are required' });
@@ -76,20 +77,28 @@ export const registerUser = async (req: Request, res: Response) => {
 
         const password = generatePassword();
         const hashedPassword = crypto.createHash('md5').update(password).digest('hex');
+        // Auto-generate password and send via email
+        const generatedPassword = generatePassword(12);
+        // const hashedPassword = crypto.createHash('md5').update(generatedPassword).digest('hex');
 
         // Insert user into database
-        await req.db('users').insert({
+        const [userId] = await req.db('users').insert({
             username,
             email,
             password: hashedPassword,
             name,
             lastname,
+            organization: organization || null,
             is_active: 'Y',
-            status: 'USER',
+            status: 'VIEWER', // Default role VIEWER
             created_date: new Date()
         });
 
-        // Send password to user's email
+        // Audit Logging
+        const ipAddress = req.ip || req.socket.remoteAddress || 'Unknown';
+        await logAudit(req.db, userId, 'REGISTER_SUCCESS', `User ${username} registered successfully`, ipAddress);
+
+        // Send registration confirmation email (No longer sending the raw generated password)
         const transporter = createTransporter();
         const from = process.env.SMTP_FROM || process.env.SMTP_USER;
         
@@ -103,11 +112,11 @@ export const registerUser = async (req: Request, res: Response) => {
             from,
             to: email,
             subject: 'Your account has been created',
-            text: `Hello ${name}, your password is: ${password}`,
-            html: `<p>Hello ${name},</p><p>Your password is: <b>${password}</b></p>`
+            text: `Hello ${name}, your account has been successfully created.\n\nYour login credentials:\nUsername: ${username}\nPassword: ${generatedPassword}\n\nPlease change your password after your first login.`,
+            html: `<p>Hello ${name},</p><p>Your account has been successfully created.</p><p><strong>Your login credentials:</strong></p><ul><li>Username: ${username}</li><li>Password: ${generatedPassword}</li></ul><p>Please change your password after your first login.</p>`
         });
 
-        res.status(201).json({ message: 'User registered successfully. Please check your email for the password.' });
+        res.status(201).json({ message: 'User registered successfully. Please check your email for confirmation.' });
 
     } catch (error: any) {
         if (error.code === 'ER_DUP_ENTRY') {

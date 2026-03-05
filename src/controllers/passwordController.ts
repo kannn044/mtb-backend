@@ -10,9 +10,10 @@ export const changePassword = async (req: Request, res: Response) => {
             return res.status(400).json({ message: 'Current password and new password are required.' });
         }
 
-        // Validate new password (simple check for now)
-        if (newPassword.length < 6) { // Example: minimum 6 characters
-            return res.status(400).json({ message: 'New password must be at least 6 characters long.' });
+        // Validate new password with complexity requirements
+        const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+        if (!passwordRegex.test(newPassword)) {
+            return res.status(400).json({ message: 'New password must be at least 8 characters long, contain an uppercase letter, a lowercase letter, a number, and a special character.' });
         }
         if (currentPassword === newPassword) {
             return res.status(400).json({ message: 'New password cannot be the same as the current password.' });

@@ -1,10 +1,10 @@
 import { Router } from 'express';
 import { getDashboardData, previewPreexistingClusterReportFile } from '../controllers/dashboardController';
-import { checkAuth } from '../middlewares/auth';
+// Removed checkAuth so Dashboard API is public for VIEWERS
 
 const router = Router();
 
-router.get('/', checkAuth, getDashboardData);
+router.get('/', getDashboardData);
 router.use('/report/cluster-view', previewPreexistingClusterReportFile);
 
 export default router;
