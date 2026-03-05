@@ -62,6 +62,18 @@ export const registerUser = async (req: Request, res: Response) => {
             return res.status(400).json({ message: 'Invalid email' });
         }
 
+        // Check for duplicate username
+        const existingUsername = await req.db('users').where({ username }).first();
+        if (existingUsername) {
+            return res.status(409).json({ message: 'Username is already taken.' });
+        }
+
+        // Check for duplicate email
+        const existingEmail = await req.db('users').where({ email: email.trim() }).first();
+        if (existingEmail) {
+            return res.status(409).json({ message: 'Email is already registered.' });
+        }
+
         const password = generatePassword();
         const hashedPassword = crypto.createHash('md5').update(password).digest('hex');
 
