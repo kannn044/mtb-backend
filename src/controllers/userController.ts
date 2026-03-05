@@ -12,6 +12,7 @@ export const getUsers = async (req: Request, res: Response) => {
                 'email',
                 'name',
                 'lastname',
+                'organization',
                 'status',
                 'is_active',
                 'created_date',
@@ -33,7 +34,7 @@ export const getUsers = async (req: Request, res: Response) => {
 
 export const createUser = async (req: Request, res: Response) => {
     try {
-        const { username, password, email, name, lastname, is_active, status } = req.body;
+        const { username, password, email, name, lastname, organization, is_active, status } = req.body;
 
         if (!username || !password) {
             return res.status(400).json({ message: 'Username and password are required' });
@@ -55,6 +56,7 @@ export const createUser = async (req: Request, res: Response) => {
             password: hashedPassword,
             name,
             lastname: lastname,
+            organization: organization || null,
             is_active,
             status,
             created_date: new Date()
@@ -74,7 +76,7 @@ export const createUser = async (req: Request, res: Response) => {
 export const updateUser = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const { email, name, lastname, is_active, status } = req.body;
+        const { email, name, lastname, organization, is_active, status, password } = req.body;
 
         const [user] = await req.db('users').where('id', id).select('id');
 
@@ -102,8 +104,12 @@ export const updateUser = async (req: Request, res: Response) => {
         if (email !== undefined) updateData.email = email;
         if (name !== undefined) updateData.name = name;
         if (lastname !== undefined) updateData.lastname = lastname;
+        if (organization !== undefined) updateData.organization = organization;
         if (is_active !== undefined) updateData.is_active = is_active;
         if (status !== undefined) updateData.status = status;
+        if (password) {
+            updateData.password = crypto.createHash('md5').update(password).digest('hex');
+        }
 
         await req.db('users').where('id', id).update({
             ...updateData
