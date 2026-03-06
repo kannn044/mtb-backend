@@ -11,7 +11,7 @@ export const changePassword = async (req: Request, res: Response) => {
         }
 
         // Validate new password with complexity requirements
-        const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+        const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^~_\-+=|\\/.,:;()\[\]{}])[A-Za-z\d@$!%*?&#^~_\-+=|\\/.,:;()\[\]{}]{8,}$/;
         if (!passwordRegex.test(newPassword)) {
             return res.status(400).json({ message: 'New password must be at least 8 characters long, contain an uppercase letter, a lowercase letter, a number, and a special character.' });
         }
