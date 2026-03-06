@@ -15,6 +15,7 @@ export const getUsers = async (req: Request, res: Response) => {
                 'organization',
                 'status',
                 'is_active',
+                'is_approve',
                 'created_date',
                 'updated_date'
             )
@@ -91,7 +92,7 @@ export const createUser = async (req: Request, res: Response) => {
 export const updateUser = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const { email, name, lastname, organization, is_active, status, password } = req.body;
+        const { email, name, lastname, organization, is_active, is_approve, status, password } = req.body;
 
         const [user] = await req.db('users').where('id', id).select('id');
 
@@ -122,6 +123,7 @@ export const updateUser = async (req: Request, res: Response) => {
         if (organization !== undefined) updateData.organization = organization;
         if (is_active !== undefined) updateData.is_active = is_active;
         if (status !== undefined) updateData.status = status;
+        if (is_approve !== undefined) updateData.is_approve = is_approve;
         if (password) {
             updateData.password = crypto.createHash('md5').update(password).digest('hex');
         }

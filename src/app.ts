@@ -12,6 +12,7 @@ import dashboardRoute from './routes/dashboardRoute';
 import downloadRoute from './routes/downloadRoute';
 import registerRoute from './routes/registerRoute';
 import passwordRoute from './routes/passwordRoute';
+import auditLogRoute from './routes/auditLogRoute';
 import { handleDevErrors, handleNotFound } from './middlewares/errorHandler';
 
 const app = express();
@@ -43,6 +44,7 @@ app.use('/api/dashboard', dashboardRoute);
 app.use('/api/download', downloadRoute);
 app.use('/api/register', registerRoute);
 app.use('/api/password', passwordRoute);
+app.use('/api/audit-logs', auditLogRoute);
 
 // Must be after all routes
 app.use(handleNotFound);
