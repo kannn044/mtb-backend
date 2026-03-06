@@ -48,6 +48,20 @@ export const createUser = async (req: Request, res: Response) => {
             }
         }
 
+        // Check for duplicate username
+        const existingUsername = await req.db('users').where({ username }).first();
+        if (existingUsername) {
+            return res.status(409).json({ message: 'Username is already taken.' });
+        }
+
+        // Check for duplicate email
+        if (email) {
+            const existingEmail = await req.db('users').where({ email: email.trim() }).first();
+            if (existingEmail) {
+                return res.status(409).json({ message: 'Email is already registered.' });
+            }
+        }
+
         const hashedPassword = crypto.createHash('md5').update(password).digest('hex');
 
         const [id] = await req.db('users').insert({
@@ -66,7 +80,8 @@ export const createUser = async (req: Request, res: Response) => {
 
     } catch (error: any) {
         if (error.code === 'ER_DUP_ENTRY') {
-            return res.status(409).json({ message: 'Duplicate Username' });
+            const msg = error.message?.includes('email') ? 'Email is already registered.' : 'Username is already taken.';
+            return res.status(409).json({ message: msg });
         }
         console.error('Error registering user:', error);
         res.status(500).json({ message: 'Internal Server Error' });
