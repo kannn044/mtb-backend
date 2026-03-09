@@ -42,12 +42,12 @@ const gzOnlyFilter = (req: any, file: Express.Multer.File, cb: any) => {
 
 // Filter B: สำหรับ Batch Upload (ฉลาดขึ้น เช็คตาม Field Name)
 const batchFilter = (req: any, file: Express.Multer.File, cb: any) => {
-  // 1. ถ้าเป็นช่อง 'excel' ต้องเป็น .xlsx หรือ .xls
+  // 1. ถ้าเป็นช่อง 'excel' ต้องเป็น .xlsx, .xls, หรือ .csv
   if (file.fieldname === 'excel') {
-    if (file.originalname.match(/\.(xlsx|xls)$/i)) { // i = case insensitive
+    if (file.originalname.match(/\.(xlsx|xls|csv)$/i)) { // i = case insensitive
       return cb(null, true);
     }
-    return cb(new Error('Invalid metadata file. Only .xlsx or .xls allowed!'), false);
+    return cb(new Error('Invalid metadata file. Only .xlsx, .xls, or .csv allowed!'), false);
   }
   
   // 2. ถ้าเป็นช่อง 'files' ต้องเป็น .gz
