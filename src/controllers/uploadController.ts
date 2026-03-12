@@ -9,12 +9,14 @@ import dotenv from "dotenv";
 dotenv.config();
 import { ensureDirSync, getUploadBaseDir } from '../utils/uploadPaths';
 import { enqueuePipelineRun, kickPipelineQueue } from '../utils/pipelineQueue';
+import { sendFastaDetectedEmail } from '../utils/pipelineMailer';
 
 // =============================================================================
 // 1. CONFIGURATION & TYPES
 // =============================================================================
 
 const UPLOAD_ROOT = `uploads`;
+const FASTA_EXTENSIONS = ['.fasta', '.fa', '.fas', '.fasta.gz', '.fa.gz'];
 const REQUIRED_HEADERS = [
     'patient_id', 'sample_id', 'fastq_1', 'fastq_2', 'collection_date', 'district',
     'province', 'sex', 'age', 'ethnic_group', 'education',
@@ -24,6 +26,12 @@ const REQUIRED_HEADERS = [
 interface CustomRequest extends Request {
     db: Knex;
 }
+
+/** Returns true when the filename is a FASTA-type file. */
+const isFastaFile = (filename: string): boolean => {
+    const lower = filename.toLowerCase();
+    return FASTA_EXTENSIONS.some(ext => lower.endsWith(ext));
+};
 
 
 // =============================================================================
@@ -94,13 +102,14 @@ const ensureUserDirs = (userId: string) => {
     const userDir = path.join(UPLOAD_ROOT, 'user_spaces', `user_${userId}`);
     const inputsDir = path.join(userDir, 'inputs');
     const seqDataDir = path.join(inputsDir, 'seq_data');
+    const fastaDir = path.join(inputsDir, 'fasta');
     const metadataDir = path.join(inputsDir, 'metadata');
 
-    [userDir, inputsDir, seqDataDir, metadataDir].forEach(dir => {
+    [userDir, inputsDir, seqDataDir, fastaDir, metadataDir].forEach(dir => {
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     });
 
-    return { seqDataDir, metadataDir };
+    return { seqDataDir, fastaDir, metadataDir };
 };
 
 const getExistingRecords = (metadataPath: string): { sampleIds: Set<string> } => {
@@ -192,7 +201,7 @@ export const uploadFileSingle = async (req: Request, res: Response): Promise<voi
         // [UPDATE] เรียกใช้ Helper
         const userId = getUserIdFromRequest(req);
         console.log('[UploadSingle] user', { userId });
-        const { seqDataDir, metadataDir } = ensureUserDirs(userId);
+        const { seqDataDir, fastaDir, metadataDir } = ensureUserDirs(userId);
         const metadataFilePath = path.join(metadataDir, 'metadata.txt');
 
         uploadedFiles = (req.files as Express.Multer.File[]) || [];
@@ -217,13 +226,17 @@ export const uploadFileSingle = async (req: Request, res: Response): Promise<voi
         const { sampleIds } = getExistingRecords(metadataFilePath);
 
         if (sampleIds.has(String(metadataObj.sample_id))) throw new Error(`Duplicate sample_id detected`);
-        if (fs.existsSync(path.join(seqDataDir, f1Name))) throw new Error(`File exists: ${f1Name}`);
-        if (fs.existsSync(path.join(seqDataDir, f2Name))) throw new Error(`File exists: ${f2Name}`);
+
+        // Determine target directory per file (FASTA → fasta/, FASTQ → seq_data/)
+        const getTargetDir = (fname: string) => isFastaFile(fname) ? fastaDir : seqDataDir;
+
+        if (fs.existsSync(path.join(getTargetDir(f1Name), f1Name))) throw new Error(`File exists: ${f1Name}`);
+        if (fs.existsSync(path.join(getTargetDir(f2Name), f2Name))) throw new Error(`File exists: ${f2Name}`);
 
         // Move Files
         try {
-            const dest1 = path.join(seqDataDir, f1Name);
-            const dest2 = path.join(seqDataDir, f2Name);
+            const dest1 = path.join(getTargetDir(f1Name), f1Name);
+            const dest2 = path.join(getTargetDir(f2Name), f2Name);
             fs.renameSync(file1.path, dest1); movedFilePaths.push(dest1);
             fs.renameSync(file2.path, dest2); movedFilePaths.push(dest2);
         } catch (ioError) { throw new Error('Failed to move files.'); }
@@ -272,17 +285,17 @@ export const uploadFileBatch = async (req: Request, res: Response): Promise<void
 
         const userId = getUserIdFromRequest(req);
         console.log('[UploadBatch] user', { userId });
-        const { seqDataDir, metadataDir } = ensureUserDirs(userId);
+        const { seqDataDir, fastaDir, metadataDir } = ensureUserDirs(userId);
         const metadataFilePath = path.join(metadataDir, 'metadata.txt');
 
         const filesMap = req.files as { [fieldname: string]: Express.Multer.File[] };
         const excelFile = filesMap['excel'] ? filesMap['excel'][0] : null;
-        const gzFiles = filesMap['files'] || [];
+        const seqFiles = filesMap['files'] || [];
 
         if (excelFile) { excelFile.originalname = sanitizeFileName(excelFile.originalname); allUploadedFiles.push(excelFile); }
-        gzFiles.forEach(f => { f.originalname = sanitizeFileName(f.originalname); allUploadedFiles.push(f); });
+        seqFiles.forEach(f => { f.originalname = sanitizeFileName(f.originalname); allUploadedFiles.push(f); });
 
-        if (!excelFile || gzFiles.length === 0) throw new Error('Missing metadata file (.xlsx/.xls/.csv) or .gz files');
+        if (!excelFile || seqFiles.length === 0) throw new Error('Missing metadata file (.xlsx/.xls/.csv) or sequence files');
 
         const workbook = xlsx.readFile(excelFile.path);
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -294,6 +307,9 @@ export const uploadFileBatch = async (req: Request, res: Response): Promise<void
         const batchSampleIds = new Set<string>();
         const filesToMove: Array<{ file: Express.Multer.File, dest: string }> = [];
 
+        // Helper: pick target dir based on file type
+        const getTargetDir = (fname: string) => isFastaFile(fname) ? fastaDir : seqDataDir;
+
         for (let i = 0; i < excelData.length; i++) {
             const row = excelData[i];
             const sId = String(row.sample_id || '').trim();
@@ -302,18 +318,18 @@ export const uploadFileBatch = async (req: Request, res: Response): Promise<void
 
             if (!sId || !f1Name || !f2Name) throw new Error(`Row ${i + 1}: Missing info`);
 
-            const file1 = gzFiles.find(f => f.originalname === f1Name);
-            const file2 = gzFiles.find(f => f.originalname === f2Name);
+            const file1 = seqFiles.find(f => f.originalname === f1Name);
+            const file2 = seqFiles.find(f => f.originalname === f2Name);
             if (!file1 || !file2) throw new Error(`Row ${i + 1}: Files not uploaded.`);
 
             if (sampleIds.has(sId)) throw new Error(`Row ${i + 1}: Duplicate sample_id '${sId}' exists.`);
-            if (fs.existsSync(path.join(seqDataDir, f1Name))) throw new Error(`File ${f1Name} exists.`);
-            if (fs.existsSync(path.join(seqDataDir, f2Name))) throw new Error(`File ${f2Name} exists.`);
+            if (fs.existsSync(path.join(getTargetDir(f1Name), f1Name))) throw new Error(`File ${f1Name} exists.`);
+            if (fs.existsSync(path.join(getTargetDir(f2Name), f2Name))) throw new Error(`File ${f2Name} exists.`);
             if (batchSampleIds.has(sId)) throw new Error(`Row ${i + 1}: Duplicate in batch.`);
 
             batchSampleIds.add(sId);
-            filesToMove.push({ file: file1, dest: path.join(seqDataDir, f1Name) });
-            filesToMove.push({ file: file2, dest: path.join(seqDataDir, f2Name) });
+            filesToMove.push({ file: file1, dest: path.join(getTargetDir(f1Name), f1Name) });
+            filesToMove.push({ file: file2, dest: path.join(getTargetDir(f2Name), f2Name) });
         }
 
         try {
@@ -422,12 +438,14 @@ export const executeRunProcess = async (req: Request, res: Response): Promise<vo
                 userLabel = [name, lastname].filter(Boolean).join(' ') || username || userLabel;
             }
         }
-        const { seqDataDir, metadataDir } = ensureUserDirs(userId);
+        const { seqDataDir, fastaDir, metadataDir } = ensureUserDirs(userId);
 
         const hasMetadata = fs.existsSync(path.join(metadataDir, 'metadata.txt'));
         const hasSeqFiles = fs.readdirSync(seqDataDir).length > 0;
+        const fastaFiles = fs.existsSync(fastaDir) ? fs.readdirSync(fastaDir) : [];
+        const hasFastaFiles = fastaFiles.length > 0;
 
-        if (!hasMetadata && !hasSeqFiles) {
+        if (!hasMetadata && !hasSeqFiles && !hasFastaFiles) {
             res.status(StatusCodes.BAD_REQUEST).json({ message: 'No data to run.' });
             return;
         }
@@ -453,16 +471,50 @@ export const executeRunProcess = async (req: Request, res: Response): Promise<vo
         }
 
         const srcSeq = path.join(sourceInputsDir, 'seq_data');
+        const srcFasta = path.join(sourceInputsDir, 'fasta');
         const srcMeta = path.join(sourceInputsDir, 'metadata');
         const destSeq = path.join(destInputsDir, 'seq_data');
+        const destFasta = path.join(destInputsDir, 'fasta');
         const destMeta = path.join(destInputsDir, 'metadata');
 
         console.log(`[Run] Moving files for User ${userId}`);
 
         if (fs.existsSync(srcSeq)) safeMove(srcSeq, destSeq);
+        if (fs.existsSync(srcFasta)) safeMove(srcFasta, destFasta);
         if (fs.existsSync(srcMeta)) safeMove(srcMeta, destMeta);
 
+        // Re-create empty user input dirs for next upload
         ensureUserDirs(userId);
+
+        // =====================================================================
+        // Condition 2: At least one FASTA file detected → abort pipeline
+        // =====================================================================
+        if (hasFastaFiles) {
+            console.log(`[Run] FASTA files detected for User ${userId}, aborting pipeline.`);
+
+            if (userEmail) {
+                try {
+                    await sendFastaDetectedEmail({ to: userEmail, userLabel });
+                    console.log(`[Run] FASTA detection email sent to ${userEmail}`);
+                } catch (emailErr) {
+                    console.error(`[Run] Failed to send FASTA detection email:`, emailErr);
+                }
+            } else {
+                console.warn(`[Run] No email for User ${userId}; cannot send FASTA notification.`);
+            }
+
+            res.status(StatusCodes.OK).json({
+                message: 'At least one FASTA file has been detected. Current pipeline cannot analyse FASTA sequence data yet. Please remove them from your input.',
+                run_id: runProcessId,
+                status: 'ABORTED',
+                destination: destRunDir,
+            });
+            return;
+        }
+
+        // =====================================================================
+        // Condition 1: Only .fastq.gz files → normal queue + pipeline
+        // =====================================================================
 
         const { queuePosition } = await enqueuePipelineRun({
             db: (req as any).db as Knex | undefined,

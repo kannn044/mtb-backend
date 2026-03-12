@@ -64,3 +64,19 @@ export const sendPipelineFinishedEmail = async (opts: {
     text,
   });
 };
+
+export const sendFastaDetectedEmail = async (opts: {
+  to: string;
+  userLabel: string;
+}): Promise<void> => {
+  const from = (process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
+  if (!from) throw new Error('Missing SMTP_FROM or SMTP_USER');
+
+  const subject = '[MTB] FASTA file detected — pipeline aborted';
+  const text =
+    `Hello ${opts.userLabel},\n\n` +
+    `At least one FASTA file has been detected. Current pipeline cannot analyse FASTA sequence data yet. Please remove them from your input.\n`;
+
+  const transporter = createTransporter();
+  await transporter.sendMail({ from, to: opts.to, subject, text });
+};
