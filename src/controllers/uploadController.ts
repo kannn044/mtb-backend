@@ -480,7 +480,7 @@ export const executeRunProcess = async (req: Request, res: Response): Promise<vo
         console.log(`[Run] Moving files for User ${userId}`);
 
         if (fs.existsSync(srcSeq)) safeMove(srcSeq, destSeq);
-        if (fs.existsSync(srcFasta)) safeMove(srcFasta, destFasta);
+        if (hasFastaFiles && fs.existsSync(srcFasta)) safeMove(srcFasta, destFasta);
         if (fs.existsSync(srcMeta)) safeMove(srcMeta, destMeta);
 
         // Re-create empty user input dirs for next upload
