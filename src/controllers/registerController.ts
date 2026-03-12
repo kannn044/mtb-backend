@@ -90,6 +90,7 @@ export const registerUser = async (req: Request, res: Response) => {
             lastname,
             organization: organization || null,
             is_active: 'Y',
+            is_approve: 'N', // Pending admin approval
             status: 'VIEWER', // Default role VIEWER
             created_date: new Date()
         });

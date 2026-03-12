@@ -282,13 +282,13 @@ export const uploadFileBatch = async (req: Request, res: Response): Promise<void
         if (excelFile) { excelFile.originalname = sanitizeFileName(excelFile.originalname); allUploadedFiles.push(excelFile); }
         gzFiles.forEach(f => { f.originalname = sanitizeFileName(f.originalname); allUploadedFiles.push(f); });
 
-        if (!excelFile || gzFiles.length === 0) throw new Error('Missing Excel or .gz files');
+        if (!excelFile || gzFiles.length === 0) throw new Error('Missing metadata file (.xlsx/.xls/.csv) or .gz files');
 
         const workbook = xlsx.readFile(excelFile.path);
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const excelData: any[] = xlsx.utils.sheet_to_json(sheet);
 
-        if (excelData.length === 0) throw new Error("Excel file is empty");
+        if (excelData.length === 0) throw new Error("Metadata file is empty");
 
         const { sampleIds } = getExistingRecords(metadataFilePath);
         const batchSampleIds = new Set<string>();

@@ -22,6 +22,18 @@ export const loginController = async (req: Request, res: Response, next: NextFun
       return res.status(401).json({ message: 'Invalid credentials' }); // Generic message for security
     }
 
+    // 1.5 Check if account is active
+    if (userRecord.is_active === 'N') {
+      await logAudit(dbInstance, userRecord.id, 'LOGIN_INACTIVE_ATTEMPT', `Attempted to login with deactivated account: ${username}`, ipAddress);
+      return res.status(403).json({ message: 'Your account has been deactivated. Please contact administrator.' });
+    }
+
+    // 1.6 Check if account is approved
+    if (userRecord.is_approve === 'N') {
+      await logAudit(dbInstance, userRecord.id, 'LOGIN_NOT_APPROVED', `Attempted to login before approval: ${username}`, ipAddress);
+      return res.status(403).json({ message: 'Your account is pending approval. Please wait for admin to approve your account.' });
+    }
+
     // 2. Check if account is currently locked
     if (userRecord.lock_until && new Date() < new Date(userRecord.lock_until)) {
       const lockTimeRemaining = Math.ceil((new Date(userRecord.lock_until).getTime() - new Date().getTime()) / 60000);
