@@ -31,12 +31,24 @@ const storage = multer.diskStorage({
 
 // --- 2. FILE FILTERS แยกกัน ---
 
-// Filter A: สำหรับ Single Upload (รับแค่ .gz อย่างเดียว)
-const gzOnlyFilter = (req: any, file: Express.Multer.File, cb: any) => {
-  if (file.originalname.toLowerCase().endsWith('.gz')) {
+// Helper: check accepted sequence file extensions
+const FASTA_EXTENSIONS = ['.fasta', '.fa', '.fas', '.fasta.gz', '.fa.gz'];
+
+const isAcceptedSequenceFile = (filename: string): boolean => {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith('.fastq.gz')) return true;
+  for (const ext of FASTA_EXTENSIONS) {
+    if (lower.endsWith(ext)) return true;
+  }
+  return false;
+};
+
+// Filter A: สำหรับ Single Upload (รับ .fastq.gz และ FASTA files)
+const sequenceFileFilter = (req: any, file: Express.Multer.File, cb: any) => {
+  if (isAcceptedSequenceFile(file.originalname)) {
     cb(null, true);
   } else {
-    cb(new Error('Invalid file type. Only .gz files are allowed!'), false);
+    cb(new Error('Invalid file type. Only .fastq.gz and FASTA files (.fasta, .fa, .fas, .fasta.gz, .fa.gz) are allowed!'), false);
   }
 };
 
@@ -50,12 +62,12 @@ const batchFilter = (req: any, file: Express.Multer.File, cb: any) => {
     return cb(new Error('Invalid metadata file. Only .xlsx, .xls, or .csv allowed!'), false);
   }
   
-  // 2. ถ้าเป็นช่อง 'files' ต้องเป็น .gz
+  // 2. ถ้าเป็นช่อง 'files' ต้องเป็น .fastq.gz หรือ FASTA files
   if (file.fieldname === 'files') {
-    if (file.originalname.toLowerCase().endsWith('.gz')) {
+    if (isAcceptedSequenceFile(file.originalname)) {
       return cb(null, true);
     }
-    return cb(new Error('Invalid sequencing file. Only .gz allowed!'), false);
+    return cb(new Error('Invalid sequencing file. Only .fastq.gz and FASTA files (.fasta, .fa, .fas, .fasta.gz, .fa.gz) are allowed!'), false);
   }
 
   // 3. ถ้าเป็นช่องอื่นที่ไม่รู้จัก
@@ -65,10 +77,10 @@ const batchFilter = (req: any, file: Express.Multer.File, cb: any) => {
 
 // --- 3. EXPORT MIDDLEWARES แยกกัน ---
 
-// ตัวเดิม (ใช้กับ route /single)
+// ตัวเดิม (ใช้กับ route /single) — now accepts .fastq.gz + FASTA
 export const uploadGzMiddleware = multer({ 
     storage: storage,
-    fileFilter: gzOnlyFilter,
+    fileFilter: sequenceFileFilter,
     limits: { fileSize: 700 * 1024 * 1024 } // 700MB
 });
 
