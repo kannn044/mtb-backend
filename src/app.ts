@@ -25,7 +25,9 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.use(express.json());
+// app.use(express.json());
+app.use(express.json({ limit: '1024mb' })); // เพิ่มขนาดไฟล์ที่รับได้
+app.use(express.urlencoded({ limit: '1024mb', extended: true })); // เพิ่มขนาดไฟล์ที่รับได้ และรองรับการเข้ารหัสแบบ extended
 app.use(cookieParser());
 
 // ✅ เรียกใช้ตรงนี้! ทุก Route ที่อยู่ข้างล่างจะรู้จัก req.db ทั้งหมด

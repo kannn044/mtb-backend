@@ -77,30 +77,45 @@ export const listRuns = async (req: Request, res: Response, next: NextFunction) 
           const reportBaseUrl = `/api/download/runs/${name}/report/cluster-view/overall_report/overall_wgs_cluster_summary_report.html`;
 
           const logPath = path.join(fullPath, 'outputs', 'user_reports', 'pipeline_execution.log');
+          const inputPath = path.join(fullPath, 'inputs', 'fasta');
+          const fastaIsDir = fs.existsSync(inputPath) && fs.statSync(inputPath).isDirectory();
+          const fastaFiles = fastaIsDir ? fs.readdirSync(inputPath) : [];
+          const hasFileInput = fastaIsDir && fastaFiles.length > 0;
           const logStat = await fs.promises.stat(logPath).catch(() => null);
 
-          if (logStat?.isFile()) {
-            const content = await fs.promises.readFile(logPath, 'utf8').catch(() => '');
-            const parsed = parsePipelineExecutionLog(content);
-            const endTimeDate = parsed.endTimeRaw ? new Date(parsed.endTimeRaw.replace(' ', 'T')) : null;
-            const endTimeMs = endTimeDate && !Number.isNaN(endTimeDate.getTime()) ? endTimeDate.getTime() : logStat.mtime.getTime();
-
+          if (!hasFileInput) {
+            if (logStat?.isFile()) {
+              const content = await fs.promises.readFile(logPath, 'utf8').catch(() => '');
+              const parsed = parsePipelineExecutionLog(content);
+              const endTimeDate = parsed.endTimeRaw ? new Date(parsed.endTimeRaw.replace(' ', 'T')) : null;
+              const endTimeMs = endTimeDate && !Number.isNaN(endTimeDate.getTime()) ? endTimeDate.getTime() : logStat.mtime.getTime();
+  
+              return {
+                id: name,
+                status: parsed.status || 'PROCESSING',
+                updatedAt: parsed.endTimeRaw || formatLocalYmdHms(logStat.mtime),
+                overallReportUrl: reportBaseUrl,
+                updatedAtMs: endTimeMs,
+              };
+            }
+  
             return {
               id: name,
-              status: parsed.status || 'PROCESSING',
-              updatedAt: parsed.endTimeRaw || formatLocalYmdHms(logStat.mtime),
+              status: 'PROCESSING',
+              updatedAt: formatLocalYmdHms(stat.mtime),
               overallReportUrl: reportBaseUrl,
-              updatedAtMs: endTimeMs,
+              updatedAtMs: stat.mtime.getTime(),
+            };
+          } else {
+            return {
+              id: name,
+              status: 'FAILED',
+              updatedAt: formatLocalYmdHms(stat.mtime),
+              overallReportUrl: reportBaseUrl,
+              updatedAtMs: stat.mtime.getTime(),
             };
           }
 
-          return {
-            id: name,
-            status: 'PROCESSING',
-            updatedAt: formatLocalYmdHms(stat.mtime),
-            overallReportUrl: reportBaseUrl,
-            updatedAtMs: stat.mtime.getTime(),
-          };
         })
     );
 
