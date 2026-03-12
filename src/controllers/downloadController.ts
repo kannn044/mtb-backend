@@ -78,7 +78,9 @@ export const listRuns = async (req: Request, res: Response, next: NextFunction) 
 
           const logPath = path.join(fullPath, 'outputs', 'user_reports', 'pipeline_execution.log');
           const inputPath = path.join(fullPath, 'inputs', 'fasta');
-          const hasFileInput = fs.existsSync(inputPath) && fs.statSync(inputPath).isDirectory();
+          const fastaIsDir = fs.existsSync(inputPath) && fs.statSync(inputPath).isDirectory();
+          const fastaFiles = fastaIsDir ? fs.readdirSync(inputPath) : [];
+          const hasFileInput = fastaIsDir && fastaFiles.length > 0;
           const logStat = await fs.promises.stat(logPath).catch(() => null);
 
           if (!hasFileInput) {
