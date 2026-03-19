@@ -48,7 +48,7 @@ export const sendPipelineFinishedEmail = async (opts: {
     : `[MTB] Pipeline failed: ${opts.runId}`;
 
   const baseUrl = (process.env.APP_BASE_URL || 'https://poc.moph.go.th/mtbcluster').replace(/\/+$/, '');
-  const previewUrl = `${baseUrl}/api/download/runs/${opts.runId}/report/overall/overall_wgs_cluster_summary_report.html`;
+  const previewUrl = `${baseUrl}/api/download/runs/${opts.runId}/report/cluster-view/overall_report/overall_wgs_cluster_summary_report.html`;
   const text =
     `Hello ${opts.userLabel},\n\n` +
     `Your pipeline run has finished.\n` +
