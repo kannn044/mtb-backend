@@ -75,11 +75,9 @@ export const registerUser = async (req: Request, res: Response) => {
             return res.status(409).json({ message: 'Email is already registered.' });
         }
 
-        const password = generatePassword();
-        const hashedPassword = crypto.createHash('md5').update(password).digest('hex');
         // Auto-generate password and send via email
         const generatedPassword = generatePassword(12);
-        // const hashedPassword = crypto.createHash('md5').update(generatedPassword).digest('hex');
+        const hashedPassword = crypto.createHash('md5').update(generatedPassword).digest('hex');
 
         // Insert user into database
         const [userId] = await req.db('users').insert({
