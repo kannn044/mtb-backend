@@ -208,13 +208,17 @@ const runPipeline = async (run: PipelineRunRecord): Promise<void> => {
 
     child.on('error', async (e: Error) => {
       console.error(`[Pipeline:${runProcessId}] spawn error`, e);
-      await dbInstance(PIPELINE_RUNS_TABLE)
-        .where({ id: run.id })
-        .update({
-          status: 'FAILED',
-          finished_at: new Date(),
-          error_message: String(e),
-        });
+      try {
+        await dbInstance(PIPELINE_RUNS_TABLE)
+          .where({ id: run.id })
+          .update({
+            status: 'FAILED',
+            finished_at: new Date(),
+            error_message: String(e),
+          });
+      } catch (dbErr) {
+        console.error(`[Pipeline:${runProcessId}] failed to update DB after spawn error`, dbErr);
+      }
       resolve();
     });
 
@@ -222,14 +226,18 @@ const runPipeline = async (run: PipelineRunRecord): Promise<void> => {
       console.log(`[Pipeline:${runProcessId}] exited`, { code, signal });
 
       const success = code === 0;
-      await dbInstance(PIPELINE_RUNS_TABLE)
-        .where({ id: run.id })
-        .update({
-          status: success ? 'SUCCESS' : 'FAILED',
-          finished_at: new Date(),
-          exit_code: code ?? null,
-          exit_signal: signal ?? null,
-        });
+      try {
+        await dbInstance(PIPELINE_RUNS_TABLE)
+          .where({ id: run.id })
+          .update({
+            status: success ? 'SUCCESS' : 'FAILED',
+            finished_at: new Date(),
+            exit_code: code ?? null,
+            exit_signal: signal ?? null,
+          });
+      } catch (dbErr) {
+        console.error(`[Pipeline:${runProcessId}] failed to update DB after close`, dbErr);
+      }
 
       if (run.user_email) {
         try {
